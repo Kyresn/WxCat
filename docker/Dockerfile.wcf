@@ -5,7 +5,7 @@
 # packages, which arm64 hosts cannot install. See docs/arm64.md.
 
 # ---------- build ----------
-FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-bookworm AS build
 
 ARG VERSION=dev
 
