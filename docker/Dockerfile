@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
         -ldflags "-s -w -X wxcat/internal/onebot.Version=${VERSION}" \
         -o /out/wxcat ./cmd/wxcat
 
-FROM alpine:3.20
+FROM alpine:3.24
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="WxCat gateway" \
