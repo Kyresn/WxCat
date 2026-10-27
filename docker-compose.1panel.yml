@@ -1,0 +1,59 @@
+# WxCat on 1Panel — linux/amd64 all-in-one deployment.
+#
+# Joins the existing 1Panel Docker network so AstrBot / DSH containers on the
+# same panel can reach WxCat by container name.
+#
+# 1Panel: Containers -> Compose -> Create, paste this file.
+# Or on the host:
+#   mkdir -p /opt/1panel/docker/compose/wxcat && cd /opt/1panel/docker/compose/wxcat
+#   docker compose -f docker-compose.1panel.yml up -d
+#
+# First start installs Wine + WeChat 3.9.12.51 into ./wine (3-8 minutes).
+# Then open http://<host>:6080/vnc.html (password below) and scan the QR code.
+
+services:
+  wxcat:
+    image: ghcr.io/kyresn/wxcat-wcf:latest
+    container_name: wxcat
+    platform: linux/amd64
+    restart: unless-stopped
+    shm_size: "512m"
+    mem_limit: 6g
+
+    ports:
+      - "${WXCAT_WEBUI_PORT:-6099}:6099"   # admin panel
+      - "${WXCAT_VNC_PORT:-6080}:6080"     # noVNC, QR login
+      - "${WXCAT_HTTP_PORT:-3000}:3000"    # OneBot HTTP API
+      - "${WXCAT_WS_PORT:-3001}:3001"      # OneBot forward WebSocket
+
+      # Optional: only needed when a gateway on another machine connects.
+      # No authentication on 11086/11087 — trusted LAN or VPN only.
+      # - "11086:11086"
+      # - "11087:11087"
+      # - "11090:11090"
+
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./wine:/home/wechat/.wine
+      - ./wechat-files:/home/wechat/WeChat Files
+
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      VNC_PASSWORD: ${VNC_PASSWORD:-wxcat}
+      WXCAT_BACKEND: wcf
+      WXCAT_ID_MODE: ${WXCAT_ID_MODE:-numeric}
+      # Applied to every OneBot endpoint that has no explicit token.
+      WXCAT_TOKEN: ${WXCAT_TOKEN:-}
+      # Admin panel token. Set this if 6099 is reachable from other machines.
+      WXCAT_WEBUI_TOKEN: ${WXCAT_WEBUI_TOKEN:-}
+      # Public prefix for image URLs. Use the address AstrBot can reach.
+      WXCAT_MEDIA_BASE_URL: ${WXCAT_MEDIA_BASE_URL:-}
+
+    networks:
+      - panel
+
+networks:
+  panel:
+    external: true
+    name: ${PANEL_NETWORK:-1panel-network}
