@@ -16,3 +16,10 @@ services:
       - "11086:11086"
       - "11087:11087"
       - "11090:11090"
+    environment:
+      # The bridges and the media agent only listen on loopback by default.
+      # A remote gateway needs them on all interfaces, and the agent must have
+      # a token because it exposes file decrypt/upload.
+      WXCAT_WCF_BRIDGE_BIND: 0.0.0.0
+      WXCAT_WCF_AGENT_ADDR: 0.0.0.0:11090
+      WXCAT_WCF_MEDIA_TOKEN: ${WXCAT_WCF_MEDIA_TOKEN:?set WXCAT_WCF_MEDIA_TOKEN}

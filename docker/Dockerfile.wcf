@@ -46,7 +46,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     WXCAT_TOKEN= \
     WXCAT_WEBUI_TOKEN= \
     WXCAT_ID_MODE=numeric \
-    WXCAT_WCF_MEDIA_TOKEN=
+    WXCAT_WCF_MEDIA_TOKEN= \
+    WXCAT_WCF_AGENT_ADDR=127.0.0.1:11090 \
+    WXCAT_WCF_BRIDGE_BIND=127.0.0.1
 
 RUN dpkg --add-architecture i386 \
     && apt-get update \

@@ -19,8 +19,9 @@ services:
       - "3001:3001"   # OneBot forward WebSocket
       # Optional: expose the WeChatFerry RPC bridges and the media agent so a
       # gateway on another machine (for example an arm64 host) can connect.
-      # The RPC ports have no authentication — only publish on a trusted LAN
-      # or VPN.
+      # The bridges/agent listen on 127.0.0.1 by default; use
+      # docker-compose.backend.yml, which also sets the required media token.
+      # The RPC ports have no authentication — trusted LAN or VPN only.
       # - "11086:11086"
       # - "11087:11087"
       # - "11090:11090"

@@ -19,6 +19,9 @@
 #     set WXCAT_BIND_IP=0.0.0.0 to expose them on the LAN.
 #   - 1panel-network is shared with every container on the panel. Tokens are
 #     mandatory; any container on that network can reach WxCat.
+#   - The WeChatFerry bridges (11086/11087) and media agent (11090) bind to
+#     127.0.0.1 inside the container, so they are not reachable from the shared
+#     network. Remote-gateway setups use docker-compose.backend.yml instead.
 #   - The image is pinned to a version tag. Set WXCAT_FULL_IMAGE to a digest
 #     (ghcr.io/kyresn/wxcat-wcf@sha256:...) for a fully immutable deploy.
 #

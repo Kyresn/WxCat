@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,7 +55,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	addr := envOr("WCF_AGENT_ADDR", ":11090")
+	addr := envOr("WCF_AGENT_ADDR", "127.0.0.1:11090")
+	if !isLoopback(addr) && a.token == "" {
+		logger.Error("refusing to listen on a non-loopback address without WCF_AGENT_TOKEN", "addr", addr)
+		os.Exit(1)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", a.handleHealth)
 	mux.HandleFunc("/decrypt", a.withAuth(a.handleDecrypt))
@@ -233,4 +238,16 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func isLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
