@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        if: runner.os == 'Linux'
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed on:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: vet
+        run: go vet ./...
+
+      - name: test
+        run: go test ./...
+
+      - name: test (race)
+        if: runner.os == 'Linux'
+        run: go test -race ./...
+
+      - name: build gateway (linux/amd64)
+        run: go build ./cmd/wxcat
+
+      - name: build wcf agent (linux)
+        if: runner.os == 'Linux'
+        run: go build ./cmd/wcf-agent
+
+      - name: build gateway (linux/arm64)
+        if: runner.os == 'Linux'
+        env:
+          GOOS: linux
+          GOARCH: arm64
+          CGO_ENABLED: "0"
+        run: go build -o /tmp/wxcat-arm64 ./cmd/wxcat
+
+      - name: build injector (windows/amd64)
+        if: runner.os == 'Linux'
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "0"
+        run: go build -o /tmp/wxinject.exe ./cmd/wxinject

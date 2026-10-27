@@ -1,0 +1,22 @@
+# runtime data
+/config/
+/data/
+/wine/
+/wechat-files/
+/.env
+
+# build output
+/bin/
+/wxcat
+/wxcat.exe
+/wcf-agent
+/wcf-agent.exe
+/wxinject.exe
+*.test
+
+# editor / agent tooling
+.idea/
+.vscode/
+.DS_Store
+.remember/
+.claude/

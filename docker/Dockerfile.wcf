@@ -1,0 +1,110 @@
+# syntax=docker/dockerfile:1
+
+# WxCat all-in-one image: WeChat 3.9.12.51 under Wine + WeChatFerry + gateway.
+# linux/amd64 only: WeChat for Windows is 32-bit x86 and needs WineHQ's i386
+# packages, which arm64 hosts cannot install. See docs/arm64.md.
+
+# ---------- build ----------
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
+
+ARG VERSION=dev
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+        -ldflags "-s -w -X wxcat/internal/onebot.Version=${VERSION}" \
+        -o /out/wxcat ./cmd/wxcat
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+        -ldflags "-s -w" -o /out/wxcat-agent ./cmd/wcf-agent
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
+        -ldflags "-s -w" -o /out/wxinject.exe ./cmd/wxinject
+
+# ---------- runtime ----------
+FROM ubuntu:22.04
+
+ARG VERSION=dev
+ARG WCF_RELEASE=v39.5.2
+ARG WECHAT_VERSION=3.9.12.51
+
+LABEL org.opencontainers.image.title="WxCat all-in-one" \
+      org.opencontainers.image.description="WeChat + WeChatFerry + OneBot 11 gateway (amd64)" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.licenses="MIT"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    HOME=/home/wechat \
+    WINEPREFIX=/home/wechat/.wine \
+    WINEARCH=win64 \
+    WINEDEBUG=-all \
+    WINEDLLOVERRIDES=mscoree,mshtml= \
+    DISPLAY=:1 \
+    LANG=zh_CN.UTF-8 \
+    WXCAT_BACKEND=wcf \
+    WXCAT_TOKEN= \
+    WXCAT_WEBUI_TOKEN= \
+    WXCAT_ID_MODE=numeric \
+    WXCAT_WCF_MEDIA_TOKEN=
+
+RUN dpkg --add-architecture i386 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates curl wget unzip xz-utils gnupg2 cabextract winetricks \
+        xvfb x11vnc novnc websockify supervisor xdotool imagemagick xauth \
+        fonts-wqy-microhei locales procps psmisc netcat-openbsd tini winbind socat \
+        libgl1 libglib2.0-0 libasound2 libpulse0 libnss3 libx11-6 libxext6 libxrender1 \
+    && sed -i 's/^# *zh_CN.UTF-8/zh_CN.UTF-8/' /etc/locale.gen \
+    && locale-gen \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -pm755 /etc/apt/keyrings \
+    && curl -fsSL https://dl.winehq.org/wine-builds/winehq.key -o /etc/apt/keyrings/winehq-archive.key \
+    && curl -fsSL https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources -o /etc/apt/sources.list.d/winehq-jammy.sources \
+    && apt-get update \
+    && apt-get install -y --install-recommends winehq-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1000 -s /bin/bash wechat \
+    && mkdir -p /opt/wcf /app/config /app/data /home/wechat/WeChat\ Files \
+    && chown -R wechat:wechat /app /opt/wcf /home/wechat
+
+USER wechat
+WORKDIR /home/wechat
+
+# WeChatFerry release assets. The upstream project is archived, so the
+# versions are pinned: WeChat 3.9.12.51 + WCF v39.5.2.
+RUN curl -fL --retry 3 -o /opt/wcf/WeChatSetup.exe \
+        "https://github.com/lich0821/WeChatFerry/releases/download/${WCF_RELEASE}/WeChatSetup-${WECHAT_VERSION}.exe" \
+    && curl -fL --retry 3 -o /opt/wcf/sdk.dll \
+        "https://github.com/lich0821/WeChatFerry/releases/download/${WCF_RELEASE}/sdk.dll" \
+    && curl -fL --retry 3 -o /opt/wcf/spy.dll \
+        "https://github.com/lich0821/WeChatFerry/releases/download/${WCF_RELEASE}/spy.dll" \
+    && ls -l /opt/wcf
+
+USER root
+
+COPY --from=build /out/wxcat /usr/local/bin/wxcat
+COPY --from=build /out/wxcat-agent /usr/local/bin/wxcat-agent
+COPY --from=build /out/wxinject.exe /opt/wcf/wxinject.exe
+COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
+COPY docker/entrypoint.sh /entrypoint.sh
+COPY docker/inject.sh /opt/wcf/inject.sh
+COPY docker/start-wechat.sh /opt/wcf/start-wechat.sh
+COPY config.example.json /opt/wxcat/config.example.json
+
+RUN chmod +x /entrypoint.sh /opt/wcf/inject.sh /opt/wcf/start-wechat.sh \
+    && chown -R wechat:wechat /opt/wcf
+
+# 6080 noVNC, 6099 WebUI, 3000 HTTP API, 3001 forward WS.
+# 11086/11087 are optional socat bridges to the WeChatFerry RPC ports, and
+# 11090 is the media agent. Publish them only on a trusted LAN, for a remote
+# (for example arm64) gateway.
+EXPOSE 6080 6099 3000 3001 11086 11087 11090
+VOLUME ["/app/config", "/app/data"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
+    CMD curl -fsS http://127.0.0.1:6099/healthz >/dev/null 2>&1 || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WxCat 控制台</title>
+<style>
+  :root { color-scheme: dark; --bg:#111417; --panel:#1a1f24; --line:#2b333b; --text:#e6e9ec; --muted:#8d99a6; --accent:#4aa8ff; --ok:#3fbf7f; --bad:#e05656; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:baseline; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  header span { color:var(--muted); }
+  main { padding:24px; display:grid; gap:16px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  section h2 { margin:0 0 12px; font-size:14px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:4px 0; }
+  .row b { font-weight:500; color:var(--muted); }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  button { background:var(--accent); color:#08121c; border:0; border-radius:6px; padding:7px 12px; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+  input, textarea { width:100%; background:#0e1216; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px; font:inherit; }
+  textarea { font-family: ui-monospace, monospace; font-size:12px; min-height:180px; resize:vertical; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  pre { margin:0; background:#0e1216; border:1px solid var(--line); border-radius:6px; padding:10px; max-height:240px; overflow:auto; font-size:12px; }
+  img#qr { width:100%; border-radius:8px; border:1px solid var(--line); display:block; }
+  .hint { color:var(--muted); font-size:12px; margin-top:8px; }
+</style>
+</head>
+<body>
+<header><h1>WxCat</h1><span>微信 OneBot 11 网关</span></header>
+<main>
+  <section>
+    <h2>状态</h2>
+    <div class="row"><b>后端</b><span id="backend">-</span></div>
+    <div class="row"><b>在线</b><span id="online">-</span></div>
+    <div class="row"><b>登录账号</b><span id="self">-</span></div>
+    <div class="row"><b>OneBot self_id</b><span id="selfid">-</span></div>
+    <div class="row"><b>连接数</b><span id="conns">-</span></div>
+    <div class="row"><b>ID 模式</b><span id="idmode">-</span></div>
+    <div class="row"><b>版本</b><span id="version">-</span></div>
+    <div class="hint">扫码登录请打开 noVNC，或用下方二维码截图。</div>
+  </section>
+
+  <section>
+    <h2>登录二维码</h2>
+    <img id="qr" alt="微信登录二维码">
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button onclick="loadQR()">刷新截图</button>
+      <a href="http://" id="vnc" target="_blank"><button class="ghost">打开 noVNC</button></a>
+    </div>
+  </section>
+
+  <section>
+    <h2>测试发送</h2>
+    <div class="grid2">
+      <select id="kind" style="background:#0e1216;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px">
+        <option value="private">私聊</option>
+        <option value="group">群聊</option>
+      </select>
+      <input id="target" placeholder="OneBot user_id / group_id">
+    </div>
+    <textarea id="text" style="min-height:90px;margin-top:8px" placeholder="消息内容"></textarea>
+    <div style="margin-top:8px"><button onclick="sendTest()">发送</button></div>
+    <pre id="sendResult" style="margin-top:10px;display:none"></pre>
+  </section>
+
+  <section>
+    <h2>网络配置</h2>
+    <textarea id="config"></textarea>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button onclick="saveConfig()">保存</button>
+      <button class="ghost" onclick="loadConfig()">重新读取</button>
+    </div>
+    <div class="hint">保存后需重启容器才能应用监听端口变化。</div>
+  </section>
+
+  <section style="grid-column:1/-1">
+    <h2>日志</h2>
+    <pre id="logs"></pre>
+    <div style="margin-top:8px"><button class="ghost" onclick="loadLogs()">刷新</button></div>
+  </section>
+</main>
+<script>
+const token = new URLSearchParams(location.search).get('token') || '';
+const H = token ? {'Authorization': 'Bearer ' + token} : {};
+const q = token ? '?token=' + encodeURIComponent(token) : '';
+const $ = id => document.getElementById(id);
+
+async function api(path, opts = {}) {
+  opts.headers = Object.assign({}, H, opts.headers || {});
+  const res = await fetch(path + q, opts);
+  return res.json();
+}
+
+async function loadStatus() {
+  try {
+    const s = await api('/api/status');
+    $('backend').textContent = s.backend || '-';
+    $('online').textContent = s.online ? '在线' : '离线';
+    $('online').className = s.online ? 'ok' : 'bad';
+    $('self').textContent = (s.self && (s.self.nickname || s.self.wxid)) || '未登录';
+    $('selfid').textContent = s.self ? s.self.self_id : '-';
+    $('conns').textContent = s.connections;
+    $('idmode').textContent = s.id_mode;
+    $('version').textContent = s.version;
+    $('vnc').href = location.protocol + '//' + location.hostname + ':6080/vnc.html';
+  } catch (e) { console.error(e); }
+}
+
+async function loadConfig() {
+  const c = await api('/api/config');
+  $('config').value = JSON.stringify(c, null, 2);
+}
+
+async function saveConfig() {
+  try {
+    const body = JSON.parse($('config').value);
+    const r = await api('/api/config', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    alert(r.message || r.error || '已保存');
+  } catch (e) { alert('JSON 解析失败: ' + e.message); }
+}
+
+async function loadLogs() {
+  const r = await api('/api/logs?tail=200');
+  $('logs').textContent = (r.lines || []).join('\n');
+}
+
+async function loadQR() {
+  const res = await fetch('/api/qr' + q, {headers: H});
+  if (!res.ok) { $('qr').alt = '截图不可用，请打开 noVNC'; return; }
+  const blob = await res.blob();
+  $('qr').src = URL.createObjectURL(blob);
+}
+
+async function sendTest() {
+  const body = {kind: $('kind').value, id: $('target').value.trim(), text: $('text').value};
+  const r = await api('/api/send', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  $('sendResult').style.display = 'block';
+  $('sendResult').textContent = JSON.stringify(r, null, 2);
+}
+
+loadStatus(); loadConfig(); loadLogs(); loadQR();
+setInterval(loadStatus, 5000);
+</script>
+</body>
+</html>

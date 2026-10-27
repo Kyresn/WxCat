@@ -1,0 +1,44 @@
+# arm64 deployment: native gateway, remote WeChat backend.
+#
+# The full image (Wine + WeChat + WeChatFerry) cannot run on arm64. Run it on
+# any x86_64 host, publish ports 11086/11087/11090, then point this file at
+# that host.
+#
+#   # on the x86 host
+#   docker compose -f docker-compose.backend.yml up -d
+#
+#   # on the arm64 host
+#   cp .env.example .env
+#   # edit WXCAT_IMAGE / WXCAT_WCF_CMD_ADDR / WXCAT_WCF_MSG_ADDR / WXCAT_WCF_MEDIA_URL
+#   docker compose -f docker-compose.arm64.yml up -d --build
+
+services:
+  wxcat:
+    image: ${WXCAT_IMAGE:-wxcat:local}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        VERSION: ${WXCAT_VERSION:-dev}
+    container_name: wxcat-gateway
+    platform: linux/arm64
+    restart: unless-stopped
+    ports:
+      - "6099:6099"
+      - "3000:3000"
+      - "3001:3001"
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    environment:
+      WXCAT_BACKEND: ${WXCAT_BACKEND:-wcf}
+      # Point these at the x86 host that runs the full image.
+      WXCAT_WCF_CMD_ADDR: ${WXCAT_WCF_CMD_ADDR:-tcp://x86-backend:11086}
+      WXCAT_WCF_MSG_ADDR: ${WXCAT_WCF_MSG_ADDR:-tcp://x86-backend:11087}
+      WXCAT_WCF_MEDIA_URL: ${WXCAT_WCF_MEDIA_URL:-http://x86-backend:11090}
+      WXCAT_WCF_MEDIA_TOKEN: ${WXCAT_WCF_MEDIA_TOKEN:-}
+      WXCAT_TOKEN: ${WXCAT_TOKEN:-}
+      WXCAT_WEBUI_TOKEN: ${WXCAT_WEBUI_TOKEN:-}
+      WXCAT_ID_MODE: ${WXCAT_ID_MODE:-numeric}
+      WXCAT_MEDIA_BASE_URL: ${WXCAT_MEDIA_BASE_URL:-}
+      TZ: ${TZ:-Asia/Shanghai}

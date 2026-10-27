@@ -1,0 +1,14 @@
+.git
+.gitignore
+.github
+.remember
+bin
+data
+config
+wine
+wechat-files
+docs
+*.md
+!README.md
+*.exe
+wxcat

@@ -1,0 +1,18 @@
+# Run this on the x86_64 WeChat host when a remote (for example arm64) gateway
+# connects over the network. It extends the full deployment and additionally
+# publishes the WeChatFerry RPC bridges and the media agent.
+#
+#   docker compose -f docker-compose.backend.yml up -d
+#
+# WARNING: 11086/11087 have no authentication. Publish them only on a trusted
+# LAN or VPN. Set WXCAT_WCF_MEDIA_TOKEN to protect 11090.
+
+services:
+  wxcat:
+    extends:
+      file: docker-compose.yml
+      service: wxcat
+    ports:
+      - "11086:11086"
+      - "11087:11087"
+      - "11090:11090"

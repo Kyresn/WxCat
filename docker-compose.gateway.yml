@@ -1,0 +1,40 @@
+# Gateway-only deployment: OneBot 11 + WebUI, no Wine/WeChat.
+# Multi-arch (linux/amd64, linux/arm64). The WeChat backend must be reachable
+# over the network: a WxCat full container on an x86 host, or any WCF/MimicWX
+# service.
+#
+#   docker compose -f docker-compose.gateway.yml up -d
+#
+# Configure the backend address in ./config/wxcat.json or via the env vars below.
+
+services:
+  wxcat:
+    image: ${WXCAT_IMAGE:-wxcat:local}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        VERSION: ${WXCAT_VERSION:-dev}
+    container_name: wxcat-gateway
+    restart: unless-stopped
+    ports:
+      - "6099:6099"   # WebUI
+      - "3000:3000"   # OneBot HTTP API
+      - "3001:3001"   # OneBot forward WebSocket
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    environment:
+      WXCAT_BACKEND: ${WXCAT_BACKEND:-wcf}
+      WXCAT_WCF_CMD_ADDR: ${WXCAT_WCF_CMD_ADDR:-tcp://127.0.0.1:11086}
+      WXCAT_WCF_MSG_ADDR: ${WXCAT_WCF_MSG_ADDR:-tcp://127.0.0.1:11087}
+      WXCAT_WCF_MEDIA_URL: ${WXCAT_WCF_MEDIA_URL:-}
+      WXCAT_WCF_MEDIA_TOKEN: ${WXCAT_WCF_MEDIA_TOKEN:-}
+      WXCAT_MIMICWX_BASE_URL: ${WXCAT_MIMICWX_BASE_URL:-}
+      WXCAT_MIMICWX_TOKEN: ${WXCAT_MIMICWX_TOKEN:-}
+      WXCAT_MIMICWX_SELF_WXID: ${WXCAT_MIMICWX_SELF_WXID:-}
+      WXCAT_TOKEN: ${WXCAT_TOKEN:-}
+      WXCAT_WEBUI_TOKEN: ${WXCAT_WEBUI_TOKEN:-}
+      WXCAT_ID_MODE: ${WXCAT_ID_MODE:-numeric}
+      WXCAT_MEDIA_BASE_URL: ${WXCAT_MEDIA_BASE_URL:-}
+      TZ: ${TZ:-Asia/Shanghai}

@@ -1,0 +1,40 @@
+services:
+  wxcat:
+    # Full image: WeChat + WeChatFerry + gateway, linux/amd64 only.
+    # Pull from ghcr.io by setting WXCAT_FULL_IMAGE in .env, or build locally.
+    image: ${WXCAT_FULL_IMAGE:-wxcat-wcf:local}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.wcf
+      args:
+        VERSION: ${WXCAT_VERSION:-dev}
+    container_name: wxcat
+    platform: linux/amd64
+    restart: unless-stopped
+    shm_size: "512m"
+    ports:
+      - "6080:6080"   # noVNC virtual desktop (QR login)
+      - "6099:6099"   # WxCat admin panel
+      - "3000:3000"   # OneBot HTTP API
+      - "3001:3001"   # OneBot forward WebSocket
+      # Optional: expose the WeChatFerry RPC bridges and the media agent so a
+      # gateway on another machine (for example an arm64 host) can connect.
+      # The RPC ports have no authentication — only publish on a trusted LAN
+      # or VPN.
+      # - "11086:11086"
+      # - "11087:11087"
+      # - "11090:11090"
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./wine:/home/wechat/.wine
+      - ./wechat-files:/home/wechat/WeChat Files
+    environment:
+      VNC_PASSWORD: ${VNC_PASSWORD:-wxcat}
+      WXCAT_BACKEND: ${WXCAT_BACKEND:-wcf}
+      WXCAT_TOKEN: ${WXCAT_TOKEN:-}
+      WXCAT_WEBUI_TOKEN: ${WXCAT_WEBUI_TOKEN:-}
+      WXCAT_ID_MODE: ${WXCAT_ID_MODE:-numeric}
+      WXCAT_WCF_MEDIA_TOKEN: ${WXCAT_WCF_MEDIA_TOKEN:-}
+      TZ: ${TZ:-Asia/Shanghai}
+    mem_limit: 6g

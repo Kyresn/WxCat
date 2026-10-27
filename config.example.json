@@ -1,0 +1,89 @@
+{
+  "backend": {
+    "type": "wcf",
+    "wcf": {
+      "cmdAddr": "tcp://127.0.0.1:10086",
+      "msgAddr": "tcp://127.0.0.1:10087",
+      "decryptDir": "",
+      "mediaUrl": "",
+      "mediaToken": ""
+    },
+    "mimicwx": {
+      "baseUrl": "http://127.0.0.1:8899",
+      "token": "",
+      "selfWxid": "",
+      "statusPath": "/status",
+      "contactsPath": "/contacts",
+      "messagesPath": "/messages/new",
+      "sendTextPath": "/send",
+      "sendImagePath": "/send_image",
+      "wsPath": "/ws",
+      "pollIntervalMs": 2000
+    },
+    "webhook": {
+      "baseUrl": "http://127.0.0.1:8080",
+      "token": "",
+      "selfWxid": "",
+      "statusPath": "/status",
+      "contactsPath": "/contacts",
+      "messagesPath": "/messages/new",
+      "sendTextPath": "/send",
+      "sendImagePath": "/send_image",
+      "wsPath": "/ws",
+      "pollIntervalMs": 2000
+    }
+  },
+  "idMode": "numeric",
+  "reportSelfMessage": false,
+  "enableLocalFile2Url": true,
+  "groupMode": "at",
+  "atKeywords": [],
+  "mediaBaseURL": "",
+  "logLevel": "info",
+  "network": {
+    "httpServers": [
+      {
+        "name": "http",
+        "enable": true,
+        "host": "0.0.0.0",
+        "port": 3000,
+        "messagePostFormat": "array",
+        "token": "",
+        "debug": false
+      }
+    ],
+    "httpClients": [],
+    "websocketServers": [
+      {
+        "name": "ws",
+        "enable": true,
+        "host": "0.0.0.0",
+        "port": 3001,
+        "messagePostFormat": "array",
+        "reportSelfMessage": false,
+        "token": "",
+        "heartInterval": 30000,
+        "debug": false
+      }
+    ],
+    "websocketClients": [
+      {
+        "name": "astrbot",
+        "enable": false,
+        "url": "ws://127.0.0.1:6199/ws",
+        "messagePostFormat": "array",
+        "reportSelfMessage": false,
+        "token": "",
+        "reconnectInterval": 3000,
+        "heartInterval": 30000,
+        "debug": false
+      }
+    ]
+  },
+  "webui": {
+    "enable": true,
+    "host": "0.0.0.0",
+    "port": 6099,
+    "token": ""
+  }
+}
