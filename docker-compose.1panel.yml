@@ -3,17 +3,31 @@
 # Joins the existing 1Panel Docker network so AstrBot / DSH containers on the
 # same panel can reach WxCat by container name.
 #
-# 1Panel: Containers -> Compose -> Create, paste this file.
-# Or on the host:
+# 1Panel: Containers -> Compose -> Create, paste this file, fill the required
+# variables in the environment section. Or on the host:
 #   mkdir -p /opt/1panel/docker/compose/wxcat && cd /opt/1panel/docker/compose/wxcat
-#   docker compose -f docker-compose.1panel.yml up -d
+#   WXCAT_TOKEN=... WXCAT_WEBUI_TOKEN=... VNC_PASSWORD=... \
+#     docker compose -f docker-compose.1panel.yml up -d
+#
+# Required variables (no insecure defaults):
+#   WXCAT_TOKEN         OneBot HTTP/WS access token
+#   WXCAT_WEBUI_TOKEN   admin panel token
+#   VNC_PASSWORD        noVNC password
+#
+# Security notes:
+#   - Host ports bind to 127.0.0.1 by default. Use a 1Panel reverse proxy, or
+#     set WXCAT_BIND_IP=0.0.0.0 to expose them on the LAN.
+#   - 1panel-network is shared with every container on the panel. Tokens are
+#     mandatory; any container on that network can reach WxCat.
+#   - The image is pinned to a version tag. Set WXCAT_FULL_IMAGE to a digest
+#     (ghcr.io/kyresn/wxcat-wcf@sha256:...) for a fully immutable deploy.
 #
 # First start installs Wine + WeChat 3.9.12.51 into ./wine (3-8 minutes).
-# Then open http://<host>:6080/vnc.html (password below) and scan the QR code.
+# Then open http://<host>:6080/vnc.html and scan the QR code.
 
 services:
   wxcat:
-    image: ghcr.io/kyresn/wxcat-wcf:latest
+    image: ${WXCAT_FULL_IMAGE:-ghcr.io/kyresn/wxcat-wcf:0.1.0}
     container_name: wxcat
     platform: linux/amd64
     restart: unless-stopped
@@ -21,10 +35,10 @@ services:
     mem_limit: 6g
 
     ports:
-      - "${WXCAT_WEBUI_PORT:-6099}:6099"   # admin panel
-      - "${WXCAT_VNC_PORT:-6080}:6080"     # noVNC, QR login
-      - "${WXCAT_HTTP_PORT:-3000}:3000"    # OneBot HTTP API
-      - "${WXCAT_WS_PORT:-3001}:3001"      # OneBot forward WebSocket
+      - "${WXCAT_BIND_IP:-127.0.0.1}:${WXCAT_WEBUI_PORT:-6099}:6099"   # admin panel
+      - "${WXCAT_BIND_IP:-127.0.0.1}:${WXCAT_VNC_PORT:-6080}:6080"     # noVNC, QR login
+      - "${WXCAT_BIND_IP:-127.0.0.1}:${WXCAT_HTTP_PORT:-3000}:3000"    # OneBot HTTP API
+      - "${WXCAT_BIND_IP:-127.0.0.1}:${WXCAT_WS_PORT:-3001}:3001"      # OneBot forward WS
 
       # Optional: only needed when a gateway on another machine connects.
       # No authentication on 11086/11087 — trusted LAN or VPN only.
@@ -40,14 +54,11 @@ services:
 
     environment:
       TZ: ${TZ:-Asia/Shanghai}
-      VNC_PASSWORD: ${VNC_PASSWORD:-wxcat}
+      VNC_PASSWORD: ${VNC_PASSWORD:?set VNC_PASSWORD}
       WXCAT_BACKEND: wcf
       WXCAT_ID_MODE: ${WXCAT_ID_MODE:-numeric}
-      # Applied to every OneBot endpoint that has no explicit token.
-      WXCAT_TOKEN: ${WXCAT_TOKEN:-}
-      # Admin panel token. Set this if 6099 is reachable from other machines.
-      WXCAT_WEBUI_TOKEN: ${WXCAT_WEBUI_TOKEN:-}
-      # Public prefix for image URLs. Use the address AstrBot can reach.
+      WXCAT_TOKEN: ${WXCAT_TOKEN:?set WXCAT_TOKEN}
+      WXCAT_WEBUI_TOKEN: ${WXCAT_WEBUI_TOKEN:?set WXCAT_WEBUI_TOKEN}
       WXCAT_MEDIA_BASE_URL: ${WXCAT_MEDIA_BASE_URL:-}
 
     networks:
