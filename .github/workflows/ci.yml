@@ -65,10 +65,10 @@ jobs:
           CGO_ENABLED: "0"
         run: go build -o /tmp/wxcat-arm64 ./cmd/wxcat
 
-      - name: build injector (windows/amd64)
+      - name: build injector (windows/386)
         if: runner.os == 'Linux'
         env:
           GOOS: windows
-          GOARCH: amd64
+          GOARCH: 386
           CGO_ENABLED: "0"
         run: go build -o /tmp/wxinject.exe ./cmd/wxinject

@@ -19,7 +19,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
         -o /out/wxcat ./cmd/wxcat
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
         -ldflags "-s -w" -o /out/wxcat-agent ./cmd/wcf-agent
-RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
+# The injector MUST be 32-bit: WeChat 3.9 is a 32-bit process and
+# CreateRemoteThread cannot cross the bitness boundary.
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -trimpath \
         -ldflags "-s -w" -o /out/wxinject.exe ./cmd/wxinject
 
 # ---------- runtime ----------

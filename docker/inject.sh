@@ -39,9 +39,18 @@ inject_once() {
 
   for attempt in $(seq 1 10); do
     log "injection attempt $attempt: $dll"
+    # Success is measured by the RPC port actually opening, not by the
+    # injector's exit code: LoadLibraryA can fail silently inside WeChat.
     if wine /opt/wcf/wxinject.exe "$dll"; then
-      log "injection succeeded"
-      return 0
+      for _ in $(seq 1 10); do
+        if rpc_up; then
+          log "injection succeeded (rpc port is up)"
+          return 0
+        fi
+        sleep 1
+      done
+      log "injector exited 0 but the rpc port did not open; retrying"
+      continue
     fi
     sleep 5
   done

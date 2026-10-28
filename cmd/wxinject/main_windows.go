@@ -2,9 +2,11 @@
 
 // Command wxinject loads a DLL into a running WeChat.exe process.
 //
-// It is built as a Windows binary and executed with wine inside the WxCat
-// container. The technique is the standard CreateRemoteThread + LoadLibraryA
-// pair: allocate a buffer in the target process, write the DLL path, then call
+// It is built as a 32-bit Windows binary (GOOS=windows GOARCH=386) and executed
+// with wine inside the WxCat container: WeChat 3.9 is a 32-bit process, and
+// Windows does not allow a 64-bit process's remote thread to call LoadLibraryA
+// in a 32-bit target. The technique is CreateRemoteThread + LoadLibraryA:
+// allocate a buffer in the target process, write the DLL path, then call
 // LoadLibraryA in a new remote thread.
 package main
 
