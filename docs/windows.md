@@ -131,6 +131,7 @@ Test-NetConnection 127.0.0.1 -Port 10086
 
 **注入后 10086 仍不通**
 
+- 日志出现 `CreateRemoteThread failed: Access is denied`：PowerShell 不是管理员。用管理员身份重开。
 - `wxinject.exe` 必须是 32 位。Release 包里已固定；自己编译用 `GOOS=windows GOARCH=386`。
 - 权限级别要一致：管理员微信需要管理员 PowerShell。
 - 确认 `sdk.dll`、`spy.dll` 与私有 `WeChat.exe` 同目录。
@@ -138,9 +139,9 @@ Test-NetConnection 127.0.0.1 -Port 10086
 
 **setup 解包失败**
 
-- 安装 7-Zip 后重试，会自动改用解包模式。
-- 没有 7-Zip 时会回退到私有目录安装；检查 `runtime\wechat\WeChat.exe` 是否存在。
-- 路径含空格时脚本会使用 8.3 短路径；仍失败就换到无空格路径。
+- 推荐安装 7-Zip：解包模式最干净，不写注册表、不建快捷方式。
+- 没有 7-Zip 时会回退到私有目录静默安装；该模式依赖安装器支持 `/S /D=`，失败时请安装 7-Zip 后重试。
+- 安装包损坏时脚本会报 `The WeChat installer is corrupt`；删除 `wcf\WeChatSetup-3.9.12.51.exe` 后重跑。
 
 **微信自动升级**
 
