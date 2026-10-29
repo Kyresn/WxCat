@@ -24,7 +24,7 @@
 - **可插拔后端**：默认 WeChatFerry（Wine），也可对接 MimicWX-Linux 或其他 REST 桥。
 - **一体化镜像**：Xvfb + noVNC 虚拟桌面 + 微信 + 注入 + 网关，`docker compose up -d` 即可。
 - **多架构网关**：`linux/amd64` + `linux/arm64`，arm64 上跑网关、微信后端跑在 x86 机器上。
-- **Windows 原生**：Release 提供 `wxcat.exe` + 32 位注入器 + PowerShell 启动脚本，不装 Docker 也能跑。
+- **Windows 原生**：Release 提供 `wxcat.exe` + 32 位注入器 + PowerShell 脚本，微信 3.9.12.51 放在私有目录，不影响系统已装版本。
 - **管理面板**：登录状态、二维码截图、网络配置、测试发送、日志。
 
 ## 镜像与发行包
@@ -94,10 +94,7 @@ docker compose up -d --build
 docker compose logs -f wxcat
 ```
 
-首次启动会做两件事，耗时约 3–8 分钟：
-
-1. 下载并安装 Wine、微信 3.9.12.51 到 `./wine` 卷（只在第一次）。
-2. 启动 Xvfb、noVNC、微信，注入 hook，然后启动网关。
+镜像已内置微信 3.9.12.51（32 位）与可用的 Wine 前缀。首次启动只把内置前缀复制到 `./wine` 卷，通常几十秒，不会下载或安装微信；随后启动 Xvfb、noVNC、微信并注入 hook。
 
 > arm64 主机不要用上面的命令，见 [docs/arm64.md](docs/arm64.md)。
 
@@ -114,11 +111,11 @@ docker compose -f docker-compose.gateway.yml up -d
 从 [Releases](https://github.com/Kyresn/WxCat/releases) 下载 `wxcat-windows-amd64.zip`，解压后以管理员 PowerShell 运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1 -InstallWeChat -Firewall
+powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1 -Firewall
 powershell -ExecutionPolicy Bypass -File scripts\windows\start.ps1
 ```
 
-要求微信 **3.9.12.51**（32 位）。完整说明见 [docs/windows.md](docs/windows.md)。
+`setup.ps1` 会把微信 3.9.12.51（32 位）放进私有目录 `runtime\wechat`，不安装到 `Program Files`，不影响已安装的微信 4.x。完整说明见 [docs/windows.md](docs/windows.md)。
 
 登录：
 
@@ -240,7 +237,7 @@ WCF 后端已归档（上游 `lich0821/WeChatFerry` 停止维护），因此微�
 | --- | --- |
 | `./config` | `wxcat.json` 配置 |
 | `./data` | `idmap.json`（ID 映射）、`media/`（解密后的图片缓存） |
-| `./wine` | Wine 前缀与已安装的微信（首次启动自动安装） |
+| `./wine` | Wine 前缀（首次启动从镜像内置前缀复制，含微信 3.9.12.51） |
 | `./wechat-files` | 微信聊天文件与数据库 |
 
 删除 `./data/idmap.json` 会导致 OneBot 数字 ID 变化，AstrBot 的会话 ID 会失效，请谨慎。

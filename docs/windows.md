@@ -1,33 +1,44 @@
 # Windows 原生部署
 
-在 Windows 10/11 x64 上直接运行，不用 Docker：本机微信 3.9.12.51 + WeChatFerry 注入 + `wxcat.exe` 网关。
+在 Windows 10/11 x64 上直接运行，不用 Docker。WxCat 会把**微信 3.9.12.51（32 位）放进自己的私有目录** `runtime\wechat`，不安装到 `Program Files`，因此不会覆盖或冲突你已有的微信 4.x。
 
 ## 前置条件
 
 | 项目 | 要求 |
 | --- | --- |
 | 系统 | Windows 10/11 x64 |
-| 微信 | **3.9.12.51**（32 位）。4.x 不支持 |
+| 微信 | 不需要系统安装；WxCat 使用私有副本 3.9.12.51 |
 | 权限 | 建议管理员 PowerShell（微信若以管理员运行，注入器必须同级） |
 | 端口 | 3000 HTTP、3001 正向 WS、6099 管理面板、6199 反向 WS（出站） |
+| 可选 | 7-Zip（有则直接解包微信，没有则安装到私有目录） |
 
-> 微信 3.9 会自动升级到 4.x，导致 hook 失效。`setup.ps1` 会关闭自动更新并把 `WeChatUpdate.exe` 改名为 `.bak`。
+> 私有副本不会自动升级。`setup.ps1` 会禁用其中的 `WeChatUpdate.exe`。系统里已装的微信 4.x 保持原样。
 
-## 快速开始（Release 包）
+## 快速开始
 
 1. 从 [Releases](https://github.com/Kyresn/WxCat/releases) 下载 `wxcat-windows-amd64.zip`，解压到不含中文和空格的目录，例如 `D:\WxCat`。
 2. 以管理员身份打开 PowerShell：
 
 ```powershell
 cd D:\WxCat
-powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1 -InstallWeChat -Firewall
+powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1 -Firewall
 ```
 
 `setup.ps1` 会：
 
 - 下载 `sdk.dll`、`spy.dll`、`WeChatSetup-3.9.12.51.exe` 到 `wcf\`
+- 把微信放进 `runtime\wechat`：
+  - 检测到 7-Zip 时直接解包（便携，不写注册表、不建快捷方式）
+  - 没有 7-Zip 时静默安装到该私有目录（`/S /D=...`），仍不碰 `Program Files`
+- 把 `sdk.dll`、`spy.dll` 复制到私有微信目录
 - 生成 `config\wxcat.json`
-- 可选：静默安装微信、关闭自动更新、放行 3000/3001/6099
+- 可选：放行 3000/3001/6099
+
+离线环境：把 `WeChatSetup-3.9.12.51.exe` 放到任意位置，然后：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1 -OfflineSetup D:\WeChatSetup-3.9.12.51.exe
+```
 
 3. 编辑 `config\wxcat.json`，至少设置 token：
 
@@ -46,18 +57,26 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\start.ps1
 
 脚本会：
 
-1. 复制 `sdk.dll` / `spy.dll` 到微信安装目录。
-2. 启动 `WeChat.exe`（已在运行则跳过）。
-3. 运行 32 位 `wxinject.exe` 注入，轮询 `127.0.0.1:10086` 直到 RPC 端口真正打开。
-4. 前台运行 `wxcat.exe`，日志同时写入 `data\wxcat.log`。
+1. 优先使用 `runtime\wechat\WeChat.exe`（私有副本），找不到才回退到系统安装。
+2. 复制 `sdk.dll` / `spy.dll` 到该目录。
+3. 启动微信（已在运行则跳过）。
+4. 运行 32 位 `wxinject.exe` 注入，轮询 `127.0.0.1:10086` 直到 RPC 端口真正打开。
+5. 前台运行 `wxcat.exe`，日志同时写入 `data\wxcat.log`。
 
-5. 在弹出的微信窗口扫码登录。
+5. 在私有微信窗口扫码登录。
 
 验证：
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/get_login_info -Headers @{ Authorization = "Bearer 你的token" } -ContentType "application/json" -Body "{}"
 ```
+
+## 与已安装微信共存
+
+- 私有副本在 `runtime\wechat`，不写 `Program Files`，不改系统微信的文件。
+- 便携解包模式不写安装信息；私有安装模式只写自己的目录和标准卸载项。
+- 两个版本不要**同时**运行：微信有单实例检测，同时启动可能互相顶掉。需要系统微信时先退出 WxCat 的微信。
+- 数据目录：私有副本默认仍使用 `文档\WeChat Files`。如果系统微信 4.x 也在用同名目录，可在登录后到微信设置里改存储路径。
 
 ## 开机自启
 
@@ -73,16 +92,12 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\install-task.ps1
 Unregister-ScheduledTask -TaskName WxCat -Confirm:$false
 ```
 
-也可以用 NSSM 包装 `start.ps1`，但同样需要已登录的桌面会话。
-
 ## 连接 AstrBot / DSH
 
 与 Linux 部署一致：
 
 - AstrBot `aiocqhttp`：AstrBot 监听 6199，WxCat 的 `websocketClients[0].url` 填 `ws://<astrbot-host>:6199/ws`，token 两端一致。
 - DSH `dsh-onebot`：`forward-ws` 连 `ws://<windows-host>:3001`，或 `http` 调 `http://<windows-host>:3000`。
-
-本机测试可用 `ws://127.0.0.1:3001`。
 
 ## 目录结构
 
@@ -93,26 +108,20 @@ D:\WxCat\
 ├── config.example.json
 ├── config\wxcat.json        运行配置
 ├── data\                    idmap.json、media\、wxcat.log
+├── runtime\wechat\          私有微信 3.9.12.51（由 setup 生成）
 ├── wcf\                     sdk.dll、spy.dll、WeChatSetup-3.9.12.51.exe
 └── scripts\windows\         setup.ps1、start.ps1、install-task.ps1
 ```
 
 ## 手动操作
 
-不使用脚本时：
-
 ```powershell
-# 1. 复制 DLL
-Copy-Item .\wcf\sdk.dll "C:\Program Files (x86)\Tencent\WeChat\" -Force
-Copy-Item .\wcf\spy.dll "C:\Program Files (x86)\Tencent\WeChat\" -Force
-
-# 2. 启动微信后注入（必须用 32 位 wxinject.exe）
-.\wxinject.exe "C:\Program Files (x86)\Tencent\WeChat\sdk.dll"
-
-# 3. 确认 10086 已监听
+$wx = "D:\WxCat\runtime\wechat"
+Copy-Item .\wcf\sdk.dll "$wx\" -Force
+Copy-Item .\wcf\spy.dll "$wx\" -Force
+Start-Process "$wx\WeChat.exe"
+.\wxinject.exe "$wx\sdk.dll"
 Test-NetConnection 127.0.0.1 -Port 10086
-
-# 4. 启动网关
 .\wxcat.exe -c .\config\wxcat.json
 ```
 
@@ -120,27 +129,26 @@ Test-NetConnection 127.0.0.1 -Port 10086
 
 **注入后 10086 仍不通**
 
-- 微信版本必须是 3.9.12.51。`(Get-Item "C:\Program Files (x86)\Tencent\WeChat\WeChat.exe").VersionInfo.FileVersion`。
 - `wxinject.exe` 必须是 32 位。Release 包里已固定；自己编译用 `GOOS=windows GOARCH=386`。
 - 权限级别要一致：管理员微信需要管理员 PowerShell。
-- 确认 `sdk.dll`、`spy.dll` 与 `WeChat.exe` 同目录。
+- 确认 `sdk.dll`、`spy.dll` 与私有 `WeChat.exe` 同目录。
 - 如果 `sdk.dll` 加载后立即失败，安装 **Microsoft Visual C++ 2015-2022 Redistributable (x86)** 再试。
 
-**日志出现 `dial tcp 127.0.0.1:10086: connectex: No connection could be made`**
+**setup 解包失败**
 
-注入未生效或微信刚启动。等几秒；`start.ps1` 会自动重试 90 秒。
+- 安装 7-Zip 后重试，会自动改用解包模式。
+- 没有 7-Zip 时会回退到私有目录安装；检查 `runtime\wechat\WeChat.exe` 是否存在。
+- 路径含空格时脚本会使用 8.3 短路径；仍失败就换到无空格路径。
 
-**微信自动升级到 4.x**
+**微信自动升级**
 
-重新安装 3.9.12.51，并确认 `WeChatUpdate.exe` 已改名、注册表 `HKCU\Software\Tencent\WeChat\NeedUpdateType=0`。
+私有副本的 `WeChatUpdate.exe` 已被改名。若发现版本变成 4.x，删除 `runtime\wechat` 重新运行 `setup.ps1`。
 
 **端口被占用**
 
 ```powershell
 Get-NetTCPConnection -LocalPort 3000,3001,6099 -ErrorAction SilentlyContinue
 ```
-
-改 `config\wxcat.json` 里的端口，或结束占用进程。
 
 **管理面板二维码截图不可用**
 

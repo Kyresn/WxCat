@@ -5,6 +5,7 @@
 bin
 data
 config
+runtime
 wine
 wcf
 wechat-files

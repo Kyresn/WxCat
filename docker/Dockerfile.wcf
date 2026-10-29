@@ -87,6 +87,21 @@ RUN curl -fL --retry 3 -o /opt/wcf/WeChatSetup.exe \
         "https://github.com/lich0821/WeChatFerry/releases/download/${WCF_RELEASE}/spy.dll" \
     && ls -l /opt/wcf
 
+# Bake a ready-to-use Wine prefix with WeChat 3.9.12.51 into the image. The
+# entrypoint copies it into the volume on first run, so a container never has
+# to install WeChat and never touches a host installation.
+RUN set -e ; \
+    export WINEPREFIX=/opt/wine-seed WINEARCH=win64 WINEDEBUG=-all ; \
+    xvfb-run -a wineboot -u || true ; \
+    timeout 300 wineserver -w || true ; \
+    xvfb-run -a wine /opt/wcf/WeChatSetup.exe /S || true ; \
+    timeout 300 wineserver -w || true ; \
+    wineserver -k || true ; \
+    WEXE="$(find /opt/wine-seed -iname 'WeChat.exe' -print -quit)" ; \
+    test -n "$WEXE" ; \
+    cp /opt/wcf/sdk.dll /opt/wcf/spy.dll "$(dirname "$WEXE")/" ; \
+    echo "seeded WeChat at $WEXE"
+
 USER root
 
 COPY --from=build /out/wxcat /usr/local/bin/wxcat

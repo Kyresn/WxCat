@@ -52,6 +52,8 @@ WXCAT_WCF_MEDIA_TOKEN=与微信主机一致
 
 `sdk.dll` 与 `spy.dll` 会被复制到微信安装目录（`entrypoint.sh` 和 `inject.sh` 都会做）。
 
+镜像构建时已把微信 3.9.12.51 安装进 `/opt/wine-seed`。容器首次启动时 `entrypoint.sh` 检测 `./wine` 卷为空，就把内置前缀复制进去；只有内置前缀缺失时才回退到运行安装器。
+
 ## 首次部署验证清单
 
 Docker 守护进程需要先启动。按顺序检查：
@@ -61,7 +63,7 @@ docker compose up -d --build
 docker compose logs -f wxcat | grep -E 'entrypoint|wechat|inject|wxcat'
 ```
 
-1. **安装**：日志出现 `WeChat found at ...`，`./wine` 下存在 `drive_c/Program Files*/Tencent/WeChat/WeChat.exe`。
+1. **前缀**：日志出现 `seeding Wine prefix from the image` 与 `WeChat found at ...`，`./wine` 下存在 `drive_c/Program Files*/Tencent/WeChat/WeChat.exe`。
 2. **虚拟桌面**：`http://<host>:6080/vnc.html` 能看到微信登录窗口。
 3. **注入**：日志出现 `[inject] injection succeeded`。
 4. **登录**：扫码后 `wxcat` 日志出现 `wechat logged in wxid=... nickname=...`。

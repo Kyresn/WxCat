@@ -1,6 +1,7 @@
 #!/bin/bash
-# Container entrypoint: prepare volumes, install WeChat on first run, then hand
-# control to supervisord which starts Xvfb, VNC, WeChat, the injector and WxCat.
+# Container entrypoint: prepare volumes, seed the baked Wine prefix (or install
+# WeChat as a fallback), then hand control to supervisord which starts Xvfb,
+# VNC, WeChat, the injector and WxCat.
 set -euo pipefail
 
 log() { printf '[entrypoint] %s\n' "$*"; }
@@ -28,8 +29,22 @@ find_wechat() {
   find /home/wechat/.wine/drive_c -maxdepth 6 -iname 'WeChat.exe' -print -quit 2>/dev/null || true
 }
 
+seed_wine() {
+  local seed=/opt/wine-seed
+  if [ ! -d "$seed" ]; then
+    return 1
+  fi
+  if [ -z "$(find "$seed/drive_c" -maxdepth 6 -iname 'WeChat.exe' -print -quit 2>/dev/null)" ]; then
+    return 1
+  fi
+  log "seeding Wine prefix from the image (WeChat is already bundled)"
+  cp -a "$seed/." /home/wechat/.wine/
+  chown -R wechat:wechat /home/wechat/.wine 2>/dev/null || true
+  return 0
+}
+
 install_wechat() {
-  log "installing WeChat (first run, this takes a few minutes)"
+  log "installing WeChat (fallback, this takes a few minutes)"
   su -s /bin/bash wechat -c 'export HOME=/home/wechat WINEPREFIX=/home/wechat/.wine WINEARCH=win64 WINEDEBUG=-all; xvfb-run -a wineboot -u' || true
   su -s /bin/bash wechat -c 'export HOME=/home/wechat WINEPREFIX=/home/wechat/.wine WINEARCH=win64 WINEDEBUG=-all; xvfb-run -a wine /opt/wcf/WeChatSetup.exe /S' || true
   # Give the installer time to finish writing.
@@ -40,7 +55,7 @@ install_wechat() {
 }
 
 if [ -z "$(find_wechat)" ]; then
-  install_wechat
+  seed_wine || install_wechat
 fi
 
 EXE="$(find_wechat)"

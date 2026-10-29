@@ -1,30 +1,44 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Prepare a native Windows WxCat deployment: download the WeChatFerry DLLs,
-    create config/wxcat.json, optionally install WeChat 3.9.12.51 and open the
-    OneBot ports in Windows Firewall.
+    Prepare a native Windows WxCat deployment with a private, portable copy of
+    WeChat 3.9.12.51. Nothing is installed into Program Files, so an existing
+    WeChat 4.x installation is left untouched.
 
 .DESCRIPTION
-    Run this once after extracting the release zip. It never starts WeChat or
-    the gateway; use start.ps1 for that.
+    Run this once after extracting the release zip. It:
+      1. downloads the WeChatFerry DLLs and the WeChat 3.9.12.51 installer
+      2. extracts WeChat into runtime\wechat (or installs it into that private
+         directory when 7-Zip is unavailable)
+      3. creates config\wxcat.json
+      4. optionally opens the OneBot ports in Windows Firewall
 
-.PARAMETER InstallWeChat
-    Run the bundled WeChatSetup-3.9.12.51.exe silently when WeChat is missing.
+    It never starts WeChat or the gateway; use start.ps1 for that.
+
+.PARAMETER WeChatDir
+    Private directory for WeChat. Defaults to <root>\runtime\wechat.
+
+.PARAMETER SkipWeChat
+    Do not provision WeChat; use an existing -WeChatExe at start time.
+
+.PARAMETER OfflineSetup
+    Path to a WeChatSetup-3.9.12.51.exe to use instead of downloading it.
 
 .PARAMETER Firewall
     Create inbound TCP rules for 3000 (HTTP API), 3001 (forward WebSocket) and
     6099 (admin panel). Requires an elevated PowerShell.
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1 -InstallWeChat -Firewall
+    powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1 -Firewall
 #>
 [CmdletBinding()]
 param(
     [string]$WcfVersion = "v39.5.2",
     [string]$WeChatVersion = "3.9.12.51",
     [string]$Root,
-    [switch]$InstallWeChat,
+    [string]$WeChatDir,
+    [string]$OfflineSetup,
+    [switch]$SkipWeChat,
     [switch]$Firewall
 )
 
@@ -35,30 +49,137 @@ if (-not $Root) {
     $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 }
 $Root = (Resolve-Path $Root).Path
+if (-not $WeChatDir) {
+    $WeChatDir = Join-Path $Root "runtime\wechat"
+}
 $WcfDir = Join-Path $Root "wcf"
 $ConfigDir = Join-Path $Root "config"
-New-Item -ItemType Directory -Force -Path $WcfDir, $ConfigDir | Out-Null
+New-Item -ItemType Directory -Force -Path $WcfDir, $ConfigDir, $WeChatDir | Out-Null
 
-function Get-WeChatExe {
+function Get-RemoteFile {
+    param(
+        [string]$Url,
+        [string]$Dest
+    )
+    $mirrors = @(
+        $Url,
+        ("https://ghproxy.net/" + $Url),
+        ("https://gh-proxy.com/" + $Url)
+    )
+    foreach ($u in $mirrors) {
+        try {
+            Write-Host "[download] $u"
+            Invoke-WebRequest -Uri $u -OutFile $Dest -UseBasicParsing
+            if ((Get-Item $Dest).Length -gt 0) { return }
+        } catch {
+            Write-Warning "[download] failed: $u ($($_.Exception.Message))"
+        }
+    }
+    throw "Could not download $Url. Download it manually and pass -OfflineSetup."
+}
+
+function Find-WeChatExe {
+    param([string]$Dir)
+    if (-not (Test-Path $Dir)) { return $null }
+    $hit = Get-ChildItem -Path $Dir -Filter "WeChat.exe" -Recurse -File -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($hit) { return $hit.FullName }
+    return $null
+}
+
+function Get-SevenZip {
     $candidates = @(
-        (Join-Path ${env:ProgramFiles(x86)} "Tencent\WeChat\WeChat.exe"),
-        (Join-Path $env:ProgramFiles "Tencent\WeChat\WeChat.exe")
+        (Join-Path $env:ProgramFiles "7-Zip\7z.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "7-Zip\7z.exe")
     )
     foreach ($p in $candidates) {
         if ($p -and (Test-Path $p)) { return $p }
     }
+    $cmd = Get-Command "7z.exe" -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
     return $null
 }
 
+function Install-WeChatPrivate {
+    param(
+        [string]$Setup,
+        [string]$Dir
+    )
+
+    New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+
+    $sevenZip = Get-SevenZip
+    if ($sevenZip) {
+        Write-Host "[wechat] extracting with $sevenZip into $Dir"
+        $tmp = Join-Path $env:TEMP ("wxcat-wechat-" + [Guid]::NewGuid().ToString("N"))
+        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+        try {
+            & $sevenZip x $Setup "-o$tmp" -y | Out-Null
+            $exe = Find-WeChatExe $tmp
+            if ($exe) {
+                Copy-Item (Join-Path $tmp "*") $Dir -Recurse -Force
+                $found = Find-WeChatExe $Dir
+                if ($found) { return $found }
+            }
+        } finally {
+            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Write-Warning "[wechat] 7-Zip extraction did not produce WeChat.exe; falling back to a private install"
+    }
+
+    Write-Host "[wechat] installing into the private directory $Dir"
+    # NSIS /D= needs the last argument, unquoted. Use the 8.3 path so spaces
+    # in $Root cannot break the argument.
+    $fso = New-Object -ComObject Scripting.FileSystemObject
+    $shortDir = $fso.GetFolder($Dir).ShortPath
+    Start-Process -FilePath $Setup -ArgumentList "/S", "/D=$shortDir" -Wait
+    return (Find-WeChatExe $Dir)
+}
+
 $base = "https://github.com/lich0821/WeChatFerry/releases/download/$WcfVersion"
-foreach ($name in @("sdk.dll", "spy.dll", "WeChatSetup-$WeChatVersion.exe")) {
+foreach ($name in @("sdk.dll", "spy.dll")) {
     $dest = Join-Path $WcfDir $name
     if (Test-Path $dest) {
         Write-Host "[skip] $name"
         continue
     }
     Write-Host "[download] $name"
-    Invoke-WebRequest -Uri "$base/$name" -OutFile $dest -UseBasicParsing
+    Get-RemoteFile -Url "$base/$name" -Dest $dest
+}
+
+$setupName = "WeChatSetup-$WeChatVersion.exe"
+$setupPath = Join-Path $WcfDir $setupName
+if ($OfflineSetup) {
+    $setupPath = (Resolve-Path $OfflineSetup).Path
+    Write-Host "[wechat] using offline installer $setupPath"
+} elseif (-not (Test-Path $setupPath)) {
+    Write-Host "[download] $setupName (about 285 MB)"
+    Get-RemoteFile -Url "$base/$setupName" -Dest $setupPath
+}
+
+if ($SkipWeChat) {
+    Write-Host "[wechat] skipped; pass -WeChatExe to start.ps1"
+} else {
+    $exe = Find-WeChatExe $WeChatDir
+    if ($exe) {
+        Write-Host "[wechat] already provisioned: $exe"
+    } else {
+        $exe = Install-WeChatPrivate -Setup $setupPath -Dir $WeChatDir
+        if (-not $exe) {
+            throw "Could not provision WeChat into $WeChatDir. Install 7-Zip and retry, or pass -OfflineSetup."
+        }
+        Write-Host "[wechat] provisioned: $exe"
+    }
+
+    Copy-Item (Join-Path $WcfDir "sdk.dll") (Split-Path -Parent $exe) -Force
+    Copy-Item (Join-Path $WcfDir "spy.dll") (Split-Path -Parent $exe) -Force
+
+    # Keep this private copy from silently upgrading itself to 4.x.
+    $updater = Join-Path (Split-Path -Parent $exe) "WeChatUpdate.exe"
+    if (Test-Path $updater) {
+        Rename-Item -Path $updater -NewName "WeChatUpdate.exe.bak" -ErrorAction SilentlyContinue
+        Write-Host "[wechat] disabled WeChatUpdate.exe in the private copy"
+    }
 }
 
 $config = Join-Path $ConfigDir "wxcat.json"
@@ -67,35 +188,6 @@ if (-not (Test-Path $config)) {
     Write-Host "[config] created $config"
 } else {
     Write-Host "[config] kept existing $config"
-}
-
-if ($InstallWeChat) {
-    $exe = Get-WeChatExe
-    if ($exe) {
-        Write-Host "[wechat] already installed: $exe"
-    } else {
-        $setup = Join-Path $WcfDir "WeChatSetup-$WeChatVersion.exe"
-        Write-Host "[wechat] installing silently (this takes a minute)"
-        Start-Process -FilePath $setup -ArgumentList "/S" -Wait
-        $exe = Get-WeChatExe
-        if (-not $exe) {
-            throw "WeChat installation did not produce WeChat.exe"
-        }
-        Write-Host "[wechat] installed: $exe"
-    }
-}
-
-# Stop WeChat 3.9 from silently upgrading to 4.x, which breaks the hook.
-if (Test-Path "HKCU:\Software\Tencent\WeChat") {
-    Set-ItemProperty -Path "HKCU:\Software\Tencent\WeChat" -Name "NeedUpdateType" -Value 0 -Type DWord -ErrorAction SilentlyContinue
-}
-$exe = Get-WeChatExe
-if ($exe) {
-    $updater = Join-Path (Split-Path -Parent $exe) "WeChatUpdate.exe"
-    if (Test-Path $updater) {
-        Rename-Item -Path $updater -NewName "WeChatUpdate.exe.bak" -ErrorAction SilentlyContinue
-        Write-Host "[wechat] disabled WeChatUpdate.exe"
-    }
 }
 
 if ($Firewall) {

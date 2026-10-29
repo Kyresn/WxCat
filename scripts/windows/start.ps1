@@ -41,9 +41,15 @@ if (-not $Config) {
 }
 
 function Get-WeChatExe {
-    param([string]$Hint)
+    param([string]$Hint, [string]$Root)
     $candidates = @()
     if ($Hint) { $candidates += $Hint }
+    $runtime = Join-Path $Root "runtime\wechat"
+    if (Test-Path $runtime) {
+        $hit = Get-ChildItem -Path $runtime -Filter "WeChat.exe" -Recurse -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($hit) { $candidates += $hit.FullName }
+    }
     $candidates += @(
         (Join-Path ${env:ProgramFiles(x86)} "Tencent\WeChat\WeChat.exe"),
         (Join-Path $env:ProgramFiles "Tencent\WeChat\WeChat.exe")
@@ -90,9 +96,9 @@ foreach ($file in @("sdk.dll", "spy.dll")) {
     }
 }
 
-$exe = Get-WeChatExe -Hint $WeChatExe
+$exe = Get-WeChatExe -Hint $WeChatExe -Root $Root
 if (-not $exe) {
-    throw "WeChat.exe not found. Install WeChat 3.9.12.51 or pass -WeChatExe."
+    throw "WeChat.exe not found. Run scripts\windows\setup.ps1 or pass -WeChatExe."
 }
 Write-Host "[wechat] $exe"
 

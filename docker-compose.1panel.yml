@@ -25,12 +25,13 @@
 #   - The image is pinned to a version tag. Set WXCAT_FULL_IMAGE to a digest
 #     (ghcr.io/kyresn/wxcat-wcf@sha256:...) for a fully immutable deploy.
 #
-# First start installs Wine + WeChat 3.9.12.51 into ./wine (3-8 minutes).
+# The image already contains WeChat 3.9.12.51 and a ready Wine prefix. First
+# start only copies it into ./wine (tens of seconds); no download or install.
 # Then open http://<host>:6080/vnc.html and scan the QR code.
 
 services:
   wxcat:
-    image: ${WXCAT_FULL_IMAGE:-ghcr.io/kyresn/wxcat-wcf:0.1.3}
+    image: ${WXCAT_FULL_IMAGE:-ghcr.io/kyresn/wxcat-wcf:0.1.4}
     container_name: ${WXCAT_CONTAINER_NAME:-wxcat}
     platform: linux/amd64
     restart: unless-stopped

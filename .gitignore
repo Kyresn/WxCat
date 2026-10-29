@@ -1,6 +1,7 @@
 # runtime data
 /config/
 /data/
+/runtime/
 /wine/
 /wechat-files/
 /wcf/
