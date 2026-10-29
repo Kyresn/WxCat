@@ -6,6 +6,7 @@ bin
 data
 config
 wine
+wcf
 wechat-files
 docs
 *.md

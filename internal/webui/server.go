@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -232,6 +233,12 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleQR(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
+
+	if runtime.GOOS == "windows" {
+		writeErr(w, http.StatusNotImplemented,
+			"QR capture is not supported on Windows; scan the code in the WeChat window")
+		return
+	}
 
 	display := os.Getenv("DISPLAY")
 	if display == "" {

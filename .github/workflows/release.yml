@@ -1,0 +1,69 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build release artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+
+          win="dist/wxcat-windows-amd64"
+          mkdir -p "$win/scripts/windows"
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w -X wxcat/internal/onebot.Version=$VERSION" \
+            -o "$win/wxcat.exe" ./cmd/wxcat
+          # 32-bit: WeChat 3.9 is a 32-bit process.
+          CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -trimpath \
+            -ldflags "-s -w" -o "$win/wxinject.exe" ./cmd/wxinject
+          cp config.example.json README.md "$win/"
+          cp docs/windows.md "$win/WINDOWS.md"
+          cp scripts/windows/*.ps1 "$win/scripts/windows/"
+
+          for arch in amd64 arm64; do
+            dir="dist/wxcat-linux-$arch"
+            mkdir -p "$dir"
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
+              -ldflags "-s -w -X wxcat/internal/onebot.Version=$VERSION" \
+              -o "$dir/wxcat" ./cmd/wxcat
+            cp config.example.json README.md "$dir/"
+            tar -C dist -czf "dist/wxcat-linux-$arch.tar.gz" "wxcat-linux-$arch"
+          done
+
+          (cd dist && zip -qr wxcat-windows-amd64.zip wxcat-windows-amd64)
+          sha256sum dist/*.zip dist/*.tar.gz > dist/SHA256SUMS
+          ls -lh dist
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.zip dist/*.tar.gz dist/SHA256SUMS --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/*.zip dist/*.tar.gz dist/SHA256SUMS \
+              --title "$GITHUB_REF_NAME" --generate-notes
+          fi

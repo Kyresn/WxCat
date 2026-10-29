@@ -3,10 +3,12 @@
 /data/
 /wine/
 /wechat-files/
+/wcf/
 /.env
 
 # build output
 /bin/
+/dist/
 /wxcat
 /wxcat.exe
 /wcf-agent

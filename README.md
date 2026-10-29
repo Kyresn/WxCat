@@ -24,14 +24,18 @@
 - **可插拔后端**：默认 WeChatFerry（Wine），也可对接 MimicWX-Linux 或其他 REST 桥。
 - **一体化镜像**：Xvfb + noVNC 虚拟桌面 + 微信 + 注入 + 网关，`docker compose up -d` 即可。
 - **多架构网关**：`linux/amd64` + `linux/arm64`，arm64 上跑网关、微信后端跑在 x86 机器上。
+- **Windows 原生**：Release 提供 `wxcat.exe` + 32 位注入器 + PowerShell 启动脚本，不装 Docker 也能跑。
 - **管理面板**：登录状态、二维码截图、网络配置、测试发送、日志。
 
-## 镜像
+## 镜像与发行包
 
-| 镜像 | 架构 | 内容 |
+| 产物 | 平台 | 内容 |
 | --- | --- | --- |
 | `ghcr.io/kyresn/wxcat` | `linux/amd64`, `linux/arm64` | 网关：OneBot 11 + WebUI，不含 Wine/微信 |
 | `ghcr.io/kyresn/wxcat-wcf` | `linux/amd64` | 一体化：Xvfb + noVNC + 微信 3.9.12.51 + WCF + 网关 |
+| `wxcat-windows-amd64.zip` | Windows 10/11 x64 | `wxcat.exe`、32 位 `wxinject.exe`、PowerShell 脚本 |
+
+Windows 用法见 [docs/windows.md](docs/windows.md)。
 
 arm64 无法运行一体化镜像（微信是 32 位 Windows 程序，arm64 装不了 i386 Wine 运行库）。推荐拓扑：x86_64 跑完整 WxCat，arm64 上的 AstrBot/DSH 直接连过去。只有必须把网关放在 arm64 时，才用网关镜像 + 远程后端（实验性）。详见 [docs/arm64.md](docs/arm64.md)。
 
@@ -104,6 +108,17 @@ cp .env.example .env
 # 编辑 WXCAT_IMAGE、WXCAT_WCF_CMD_ADDR、WXCAT_WCF_MSG_ADDR、WXCAT_WCF_MEDIA_URL
 docker compose -f docker-compose.gateway.yml up -d
 ```
+
+### 方式四：Windows 原生（不用 Docker）
+
+从 [Releases](https://github.com/Kyresn/WxCat/releases) 下载 `wxcat-windows-amd64.zip`，解压后以管理员 PowerShell 运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1 -InstallWeChat -Firewall
+powershell -ExecutionPolicy Bypass -File scripts\windows\start.ps1
+```
+
+要求微信 **3.9.12.51**（32 位）。完整说明见 [docs/windows.md](docs/windows.md)。
 
 登录：
 
@@ -242,8 +257,9 @@ WCF 后端已归档（上游 `lich0821/WeChatFerry` 停止维护），因此微�
 
 GitHub Actions：
 
-- [`.github/workflows/ci.yml`](.github/workflows/ci.yml)：`gofmt`、`go vet`、`go test`（Linux 跑 race）、交叉编译 arm64 网关与 Windows 注入器。
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml)：`gofmt`、`go vet`、`go test`（Linux 跑 race）、交叉编译 arm64 网关与 32 位 Windows 注入器。
 - [`.github/workflows/docker.yml`](.github/workflows/docker.yml)：推送 `main` 或 `v*` 标签时构建并推送 ghcr 镜像。
+- [`.github/workflows/release.yml`](.github/workflows/release.yml)：推送 `v*` 标签时构建 Windows/Linux 发行包并创建 GitHub Release。
   - `wxcat`：`linux/amd64,linux/arm64`
   - `wxcat-wcf`：`linux/amd64`
 
@@ -268,7 +284,7 @@ ghcr 包首次推送后默认是私有的。到 GitHub → Packages → 对应�
 go test ./...
 go build ./cmd/wxcat
 go build ./cmd/wcf-agent
-GOOS=windows GOARCH=amd64 go build -o wxinject.exe ./cmd/wxinject
+GOOS=windows GOARCH=386 go build -o wxinject.exe ./cmd/wxinject
 ```
 
 也可以直接用 Makefile：
@@ -276,8 +292,9 @@ GOOS=windows GOARCH=amd64 go build -o wxinject.exe ./cmd/wxinject
 ```bash
 make test
 make build VERSION=0.1.0
-make image VERSION=0.1.0          # 多架构网关
-make image-full VERSION=0.1.0     # amd64 一体化
+make build-windows VERSION=0.1.0   # wxcat.exe + 32 位 wxinject.exe
+make image VERSION=0.1.0           # 多架构网关
+make image-full VERSION=0.1.0      # amd64 一体化
 ```
 
 不使用 Docker 时，`wxcat` 可以直接跑：把 `backend.type` 指向一个已经运行的 WCF / MimicWX 服务即可。OneBot 层与微信后端完全解耦。
@@ -288,11 +305,12 @@ Windows 本机快速验证（微信 3.9.12.51 + WCF 已注入，RPC 监听 10086
 go run ./cmd/wxcat -c config\wxcat.json
 ```
 
-也可以在 Windows 上手动注入（等价于容器里的 `inject.sh`）：
+也可以在 Windows 上手动注入（等价于容器里的 `inject.sh`，**必须是 32 位注入器**）：
 
 ```powershell
+$env:GOOS="windows"; $env:GOARCH="386"
 go build -o wxinject.exe ./cmd/wxinject
-.\wxinject.exe "C:\Program Files\Tencent\WeChat\sdk.dll"
+.\wxinject.exe "C:\Program Files (x86)\Tencent\WeChat\sdk.dll"
 ```
 
 目录：
@@ -300,7 +318,7 @@ go build -o wxinject.exe ./cmd/wxinject
 ```
 cmd/wxcat           网关入口
 cmd/wcf-agent       媒体代理（远程网关时在微信主机上解密/暂存文件）
-cmd/wxinject        Windows DLL 注入器（容器内用 wine 执行）
+cmd/wxinject        Windows 32 位 DLL 注入器（容器内用 wine 执行）
 internal/onebot     OneBot 11 协议层与四种传输
 internal/backend    Backend 接口、wcf / rest 适配器
 internal/pipeline   去重、自发过滤、群 @ 过滤
@@ -309,12 +327,14 @@ internal/media      解密媒体缓存与 /media 服务
 internal/webui      管理面板（内嵌静态页）
 third_party/wcf     WeChatFerry protobuf 与精简客户端（MIT）
 docker/             Dockerfile（多架构网关）、Dockerfile.wcf（amd64 一体化）、supervisord、注入脚本
-.github/workflows   CI 与 ghcr 镜像构建
+scripts/windows/    setup.ps1、start.ps1、install-task.ps1
+.github/workflows   CI、ghcr 镜像构建、Release 发行包
 ```
 
 ## 限制
 
 - 一体化镜像仅 `linux/amd64`（Wine 需要 i386 运行库）；网关镜像支持 `linux/amd64` 与 `linux/arm64`。
+- Windows 原生部署只支持 Windows 10/11 x64 + 微信 3.9.12.51（32 位）。
 - arm64 推荐让 x86 主机跑完整服务、arm64 应用直连；arm64 网关 + 远程 WCF 属于实验性拓扑，见 [docs/arm64.md](docs/arm64.md)。
 - 微信版本锁定 3.9.12.51；升级微信会使 hook 失效。
 - 运行时内存约 4–5 GB（Wine + 微信 + 虚拟桌面）。
