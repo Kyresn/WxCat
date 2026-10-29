@@ -100,6 +100,7 @@ RUN set -e ; \
     WEXE="$(find /home/wechat/wine-seed -iname 'WeChat.exe' -print -quit)" ; \
     test -n "$WEXE" ; \
     cp /opt/wcf/sdk.dll /opt/wcf/spy.dll "$(dirname "$WEXE")/" ; \
+    rm -f /opt/wcf/WeChatSetup.exe ; \
     echo "seeded WeChat at $WEXE"
 
 USER root

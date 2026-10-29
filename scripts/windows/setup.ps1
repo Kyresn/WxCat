@@ -59,18 +59,22 @@ New-Item -ItemType Directory -Force -Path $WcfDir, $ConfigDir, $WeChatDir | Out-
 function Get-RemoteFile {
     param(
         [string]$Url,
-        [string]$Dest
+        [string]$Dest,
+        [long]$MinBytes = 1024
     )
     $mirrors = @(
         $Url,
+        ("https://ghfast.top/" + $Url),
+        ("https://gh.llkk.cc/" + $Url),
         ("https://ghproxy.net/" + $Url),
         ("https://gh-proxy.com/" + $Url)
     )
     foreach ($u in $mirrors) {
         try {
             Write-Host "[download] $u"
-            Invoke-WebRequest -Uri $u -OutFile $Dest -UseBasicParsing
-            if ((Get-Item $Dest).Length -gt 0) { return }
+            Invoke-WebRequest -Uri $u -OutFile $Dest -UseBasicParsing -TimeoutSec 900
+            if ((Get-Item $Dest).Length -ge $MinBytes) { return }
+            Write-Warning "[download] file too small, retrying: $u"
         } catch {
             Write-Warning "[download] failed: $u ($($_.Exception.Message))"
         }
@@ -80,10 +84,15 @@ function Get-RemoteFile {
 
 function Find-WeChatExe {
     param([string]$Dir)
-    if (-not (Test-Path $Dir)) { return $null }
-    $hit = Get-ChildItem -Path $Dir -Filter "WeChat.exe" -Recurse -File -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if ($hit) { return $hit.FullName }
+    if (-not (Test-Path -LiteralPath $Dir)) { return $null }
+    $hits = Get-ChildItem -LiteralPath $Dir -Filter "WeChat.exe" -Recurse -File -ErrorAction SilentlyContinue
+    # Prefer the payload directory that also contains WeChatWin.dll. The
+    # installer archive has a launcher stub at the root plus the real client
+    # under [<version>]\.
+    foreach ($hit in $hits) {
+        if (Test-Path -LiteralPath (Join-Path $hit.DirectoryName "WeChatWin.dll")) { return $hit.FullName }
+    }
+    if ($hits) { return $hits[0].FullName }
     return $null
 }
 
@@ -100,6 +109,16 @@ function Get-SevenZip {
     return $null
 }
 
+function Test-WeChatPayload {
+    param([string]$Dir)
+    foreach ($name in @("WeChat.exe", "WeChatWin.dll", "WeChatResource.dll")) {
+        $path = Join-Path $Dir $name
+        if (-not (Test-Path -LiteralPath $path)) { return $false }
+        if ((Get-Item -LiteralPath $path).Length -lt 100000) { return $false }
+    }
+    return $true
+}
+
 function Install-WeChatPrivate {
     param(
         [string]$Setup,
@@ -110,21 +129,39 @@ function Install-WeChatPrivate {
 
     $sevenZip = Get-SevenZip
     if ($sevenZip) {
+        Write-Host "[wechat] verifying installer with $sevenZip"
+        & $sevenZip t $Setup -y | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "The WeChat installer is corrupt (7-Zip test failed). Delete $Setup and re-run setup.ps1."
+        }
+
         Write-Host "[wechat] extracting with $sevenZip into $Dir"
         $tmp = Join-Path $env:TEMP ("wxcat-wechat-" + [Guid]::NewGuid().ToString("N"))
         New-Item -ItemType Directory -Force -Path $tmp | Out-Null
         try {
             & $sevenZip x $Setup "-o$tmp" -y | Out-Null
-            $exe = Find-WeChatExe $tmp
-            if ($exe) {
-                Copy-Item (Join-Path $tmp "*") $Dir -Recurse -Force
-                $found = Find-WeChatExe $Dir
-                if ($found) { return $found }
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "[wechat] 7-Zip extraction failed with exit code $LASTEXITCODE"
+            } else {
+                # Large files can appear a moment after 7-Zip exits (antivirus
+                # or filesystem flush). Poll before deciding the payload is bad.
+                $exe = $null
+                for ($i = 0; $i -lt 60; $i++) {
+                    $exe = Find-WeChatExe $tmp
+                    if ($exe -and (Test-WeChatPayload (Split-Path -Parent $exe))) { break }
+                    Start-Sleep -Milliseconds 500
+                }
+                if ($exe -and (Test-WeChatPayload (Split-Path -Parent $exe))) {
+                    Get-ChildItem -LiteralPath $tmp -Force | Copy-Item -Destination $Dir -Recurse -Force
+                    $found = Find-WeChatExe $Dir
+                    if ($found -and (Test-WeChatPayload (Split-Path -Parent $found))) { return $found }
+                }
+                Write-Warning "[wechat] extracted files are incomplete"
             }
         } finally {
             Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
         }
-        Write-Warning "[wechat] 7-Zip extraction did not produce WeChat.exe; falling back to a private install"
+        Write-Warning "[wechat] falling back to a private install"
     }
 
     Write-Host "[wechat] installing into the private directory $Dir"
@@ -133,7 +170,12 @@ function Install-WeChatPrivate {
     $fso = New-Object -ComObject Scripting.FileSystemObject
     $shortDir = $fso.GetFolder($Dir).ShortPath
     Start-Process -FilePath $Setup -ArgumentList "/S", "/D=$shortDir" -Wait
-    return (Find-WeChatExe $Dir)
+    for ($i = 0; $i -lt 60; $i++) {
+        $found = Find-WeChatExe $Dir
+        if ($found -and (Test-WeChatPayload (Split-Path -Parent $found))) { return $found }
+        Start-Sleep -Seconds 2
+    }
+    return $null
 }
 
 $base = "https://github.com/lich0821/WeChatFerry/releases/download/$WcfVersion"
@@ -149,17 +191,17 @@ foreach ($name in @("sdk.dll", "spy.dll")) {
 
 $setupName = "WeChatSetup-$WeChatVersion.exe"
 $setupPath = Join-Path $WcfDir $setupName
-if ($OfflineSetup) {
-    $setupPath = (Resolve-Path $OfflineSetup).Path
-    Write-Host "[wechat] using offline installer $setupPath"
-} elseif (-not (Test-Path $setupPath)) {
-    Write-Host "[download] $setupName (about 285 MB)"
-    Get-RemoteFile -Url "$base/$setupName" -Dest $setupPath
-}
 
 if ($SkipWeChat) {
     Write-Host "[wechat] skipped; pass -WeChatExe to start.ps1"
 } else {
+    if ($OfflineSetup) {
+        $setupPath = (Resolve-Path $OfflineSetup).Path
+        Write-Host "[wechat] using offline installer $setupPath"
+    } elseif (-not (Test-Path $setupPath)) {
+        Write-Host "[download] $setupName (about 285 MB)"
+        Get-RemoteFile -Url "$base/$setupName" -Dest $setupPath -MinBytes 200MB
+    }
     $exe = Find-WeChatExe $WeChatDir
     if ($exe) {
         Write-Host "[wechat] already provisioned: $exe"
@@ -171,13 +213,14 @@ if ($SkipWeChat) {
         Write-Host "[wechat] provisioned: $exe"
     }
 
-    Copy-Item (Join-Path $WcfDir "sdk.dll") (Split-Path -Parent $exe) -Force
-    Copy-Item (Join-Path $WcfDir "spy.dll") (Split-Path -Parent $exe) -Force
+    $payloadDir = Split-Path -Parent $exe
+    [IO.File]::Copy((Join-Path $WcfDir "sdk.dll"), (Join-Path $payloadDir "sdk.dll"), $true)
+    [IO.File]::Copy((Join-Path $WcfDir "spy.dll"), (Join-Path $payloadDir "spy.dll"), $true)
 
     # Keep this private copy from silently upgrading itself to 4.x.
     $updater = Join-Path (Split-Path -Parent $exe) "WeChatUpdate.exe"
-    if (Test-Path $updater) {
-        Rename-Item -Path $updater -NewName "WeChatUpdate.exe.bak" -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $updater) {
+        Rename-Item -LiteralPath $updater -NewName "WeChatUpdate.exe.bak" -ErrorAction SilentlyContinue
         Write-Host "[wechat] disabled WeChatUpdate.exe in the private copy"
     }
 }
@@ -197,6 +240,11 @@ if ($Firewall) {
     }
     Write-Host "[firewall] inbound TCP 3000/3001/6099 allowed"
 }
+
+# Remove the Mark-of-the-Web from files extracted from the release zip so
+# SmartScreen does not block wxcat.exe / wxinject.exe.
+Get-ChildItem -Path $Root -Recurse -File -ErrorAction SilentlyContinue |
+    Unblock-File -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "Next steps:"

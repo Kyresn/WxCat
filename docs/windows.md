@@ -14,6 +14,8 @@
 
 > 私有副本不会自动升级。`setup.ps1` 会禁用其中的 `WeChatUpdate.exe`。系统里已装的微信 4.x 保持原样。
 
+> 发行包不包含腾讯的微信安装程序（再分发受腾讯许可限制）。`setup.ps1` 会自动下载并放进私有目录；离线环境用 `-OfflineSetup` 指向本地安装包。
+
 ## 快速开始
 
 1. 从 [Releases](https://github.com/Kyresn/WxCat/releases) 下载 `wxcat-windows-amd64.zip`，解压到不含中文和空格的目录，例如 `D:\WxCat`。

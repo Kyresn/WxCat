@@ -45,17 +45,22 @@ function Get-WeChatExe {
     $candidates = @()
     if ($Hint) { $candidates += $Hint }
     $runtime = Join-Path $Root "runtime\wechat"
-    if (Test-Path $runtime) {
-        $hit = Get-ChildItem -Path $runtime -Filter "WeChat.exe" -Recurse -File -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-        if ($hit) { $candidates += $hit.FullName }
+    if (Test-Path -LiteralPath $runtime) {
+        $hits = Get-ChildItem -LiteralPath $runtime -Filter "WeChat.exe" -Recurse -File -ErrorAction SilentlyContinue
+        foreach ($hit in $hits) {
+            if (Test-Path -LiteralPath (Join-Path $hit.DirectoryName "WeChatWin.dll")) {
+                $candidates += $hit.FullName
+                break
+            }
+        }
+        if ($hits -and $candidates.Count -eq 0) { $candidates += $hits[0].FullName }
     }
     $candidates += @(
         (Join-Path ${env:ProgramFiles(x86)} "Tencent\WeChat\WeChat.exe"),
         (Join-Path $env:ProgramFiles "Tencent\WeChat\WeChat.exe")
     )
     foreach ($p in $candidates) {
-        if ($p -and (Test-Path $p)) { return (Resolve-Path $p).Path }
+        if ($p -and (Test-Path -LiteralPath $p)) { return (Resolve-Path -LiteralPath $p).Path }
     }
     return $null
 }
@@ -86,12 +91,12 @@ function Assert-Admin {
 Assert-Admin
 
 foreach ($file in @("wxcat.exe", "wxinject.exe")) {
-    if (-not (Test-Path (Join-Path $Root $file))) {
+    if (-not (Test-Path -LiteralPath (Join-Path $Root $file))) {
         throw "$file not found in $Root. Extract the release zip first."
     }
 }
 foreach ($file in @("sdk.dll", "spy.dll")) {
-    if (-not (Test-Path (Join-Path $Root "wcf\$file"))) {
+    if (-not (Test-Path -LiteralPath (Join-Path $Root "wcf\$file"))) {
         throw "wcf\$file not found. Run scripts\windows\setup.ps1 first."
     }
 }
@@ -103,8 +108,8 @@ if (-not $exe) {
 Write-Host "[wechat] $exe"
 
 $wechatDir = Split-Path -Parent $exe
-Copy-Item (Join-Path $Root "wcf\sdk.dll") $wechatDir -Force
-Copy-Item (Join-Path $Root "wcf\spy.dll") $wechatDir -Force
+[IO.File]::Copy((Join-Path $Root "wcf\sdk.dll"), (Join-Path $wechatDir "sdk.dll"), $true)
+[IO.File]::Copy((Join-Path $Root "wcf\spy.dll"), (Join-Path $wechatDir "spy.dll"), $true)
 Write-Host "[wechat] copied sdk.dll and spy.dll"
 
 $proc = Get-Process -Name "WeChat" -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -113,7 +118,13 @@ if (-not $proc) {
         throw "WeChat is not running and -NoStartWeChat was set."
     }
     Write-Host "[wechat] starting"
-    Start-Process -FilePath $exe
+    # Start-Process treats [version] in the path as a wildcard; use the .NET
+    # API with literal strings instead.
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $exe
+    $psi.WorkingDirectory = (Split-Path -Parent $exe)
+    $psi.UseShellExecute = $true
+    [void][System.Diagnostics.Process]::Start($psi)
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep -Seconds 1
         $proc = Get-Process -Name "WeChat" -ErrorAction SilentlyContinue | Select-Object -First 1
