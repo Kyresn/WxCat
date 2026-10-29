@@ -30,7 +30,7 @@ find_wechat() {
 }
 
 seed_wine() {
-  local seed=/opt/wine-seed
+  local seed=/home/wechat/wine-seed
   if [ ! -d "$seed" ]; then
     return 1
   fi

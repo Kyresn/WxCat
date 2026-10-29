@@ -52,7 +52,7 @@ WXCAT_WCF_MEDIA_TOKEN=与微信主机一致
 
 `sdk.dll` 与 `spy.dll` 会被复制到微信安装目录（`entrypoint.sh` 和 `inject.sh` 都会做）。
 
-镜像构建时已把微信 3.9.12.51 安装进 `/opt/wine-seed`。容器首次启动时 `entrypoint.sh` 检测 `./wine` 卷为空，就把内置前缀复制进去；只有内置前缀缺失时才回退到运行安装器。
+镜像构建时已把微信 3.9.12.51 安装进 `/home/wechat/wine-seed`。容器首次启动时 `entrypoint.sh` 检测 `./wine` 卷为空，就把内置前缀复制进去；只有内置前缀缺失时才回退到运行安装器。
 
 ## 首次部署验证清单
 
