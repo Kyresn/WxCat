@@ -180,9 +180,9 @@ $logDir = Join-Path $Root "data"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $env:WXCAT_DATA = $logDir
 $logFile = Join-Path $logDir "wxcat.log"
-Push-Location $Root
+Push-Location -LiteralPath $Root
 try {
-    & (Join-Path $Root "wxcat.exe") -c $Config 2>&1 | Tee-Object -FilePath $logFile -Append
+    & (Join-Path $Root "wxcat.exe") -c $Config 2>&1 | Tee-Object -LiteralPath $logFile -Append
     exit $LASTEXITCODE
 } finally {
     Pop-Location

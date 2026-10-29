@@ -8,6 +8,7 @@ on:
       - "docs/**"
       - "**/*.md"
       - "docker-compose*.yml"
+      - "scripts/windows/**"
       - ".github/dependabot.yml"
   workflow_dispatch:
 
