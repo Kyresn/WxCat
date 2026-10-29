@@ -35,7 +35,7 @@ try { chcp 65001 | Out-Null } catch { }
 if (-not $Root) {
     $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 }
-$Root = (Resolve-Path $Root).Path
+$Root = (Resolve-Path -LiteralPath $Root).Path
 if (-not $Config) {
     $Config = Join-Path $Root "config\wxcat.json"
 }

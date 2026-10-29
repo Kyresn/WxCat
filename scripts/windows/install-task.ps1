@@ -22,7 +22,7 @@ $ErrorActionPreference = "Stop"
 if (-not $Root) {
     $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 }
-$Root = (Resolve-Path $Root).Path
+$Root = (Resolve-Path -LiteralPath $Root).Path
 $script = Join-Path $PSScriptRoot "start.ps1"
 if (-not (Test-Path $script)) {
     throw "start.ps1 not found next to this script."

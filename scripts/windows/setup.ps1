@@ -48,7 +48,7 @@ $ErrorActionPreference = "Stop"
 if (-not $Root) {
     $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 }
-$Root = (Resolve-Path $Root).Path
+$Root = (Resolve-Path -LiteralPath $Root).Path
 if (-not $WeChatDir) {
     $WeChatDir = Join-Path $Root "runtime\wechat"
 }
@@ -196,7 +196,7 @@ if ($SkipWeChat) {
     Write-Host "[wechat] skipped; pass -WeChatExe to start.ps1"
 } else {
     if ($OfflineSetup) {
-        $setupPath = (Resolve-Path $OfflineSetup).Path
+        $setupPath = (Resolve-Path -LiteralPath $OfflineSetup).Path
         Write-Host "[wechat] using offline installer $setupPath"
     } elseif (-not (Test-Path -LiteralPath $setupPath)) {
         Write-Host "[download] $setupName (about 285 MB)"
