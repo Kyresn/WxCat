@@ -73,7 +73,7 @@ function Get-RemoteFile {
         try {
             Write-Host "[download] $u"
             Invoke-WebRequest -Uri $u -OutFile $Dest -UseBasicParsing -TimeoutSec 900
-            if ((Get-Item $Dest).Length -ge $MinBytes) { return }
+            if ((Get-Item -LiteralPath $Dest).Length -ge $MinBytes) { return }
             Write-Warning "[download] file too small, retrying: $u"
         } catch {
             Write-Warning "[download] failed: $u ($($_.Exception.Message))"
@@ -102,7 +102,7 @@ function Get-SevenZip {
         (Join-Path ${env:ProgramFiles(x86)} "7-Zip\7z.exe")
     )
     foreach ($p in $candidates) {
-        if ($p -and (Test-Path $p)) { return $p }
+        if ($p -and (Test-Path -LiteralPath $p)) { return $p }
     }
     $cmd = Get-Command "7z.exe" -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
@@ -181,7 +181,7 @@ function Install-WeChatPrivate {
 $base = "https://github.com/lich0821/WeChatFerry/releases/download/$WcfVersion"
 foreach ($name in @("sdk.dll", "spy.dll")) {
     $dest = Join-Path $WcfDir $name
-    if (Test-Path $dest) {
+    if (Test-Path -LiteralPath $dest) {
         Write-Host "[skip] $name"
         continue
     }
@@ -198,7 +198,7 @@ if ($SkipWeChat) {
     if ($OfflineSetup) {
         $setupPath = (Resolve-Path $OfflineSetup).Path
         Write-Host "[wechat] using offline installer $setupPath"
-    } elseif (-not (Test-Path $setupPath)) {
+    } elseif (-not (Test-Path -LiteralPath $setupPath)) {
         Write-Host "[download] $setupName (about 285 MB)"
         Get-RemoteFile -Url "$base/$setupName" -Dest $setupPath -MinBytes 200MB
     }
@@ -226,8 +226,8 @@ if ($SkipWeChat) {
 }
 
 $config = Join-Path $ConfigDir "wxcat.json"
-if (-not (Test-Path $config)) {
-    Copy-Item (Join-Path $Root "config.example.json") $config
+if (-not (Test-Path -LiteralPath $config)) {
+    [IO.File]::Copy((Join-Path $Root "config.example.json"), $config, $false)
     Write-Host "[config] created $config"
 } else {
     Write-Host "[config] kept existing $config"

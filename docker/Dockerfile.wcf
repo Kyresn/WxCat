@@ -30,6 +30,9 @@ FROM ubuntu:22.04
 ARG VERSION=dev
 ARG WCF_RELEASE=v39.5.2
 ARG WECHAT_VERSION=3.9.12.51
+# Override with a mirror when GitHub is slow or blocked, for example
+# --build-arg WCF_BASE_URL=https://ghfast.top/https://github.com/lich0821/WeChatFerry/releases/download
+ARG WCF_BASE_URL=https://github.com/lich0821/WeChatFerry/releases/download
 
 LABEL org.opencontainers.image.title="WxCat all-in-one" \
       org.opencontainers.image.description="WeChat + WeChatFerry + OneBot 11 gateway (amd64)" \
@@ -80,11 +83,11 @@ WORKDIR /home/wechat
 # WeChatFerry release assets. The upstream project is archived, so the
 # versions are pinned: WeChat 3.9.12.51 + WCF v39.5.2.
 RUN curl -fL --retry 3 -o /opt/wcf/WeChatSetup.exe \
-        "https://github.com/lich0821/WeChatFerry/releases/download/${WCF_RELEASE}/WeChatSetup-${WECHAT_VERSION}.exe" \
+        "${WCF_BASE_URL}/${WCF_RELEASE}/WeChatSetup-${WECHAT_VERSION}.exe" \
     && curl -fL --retry 3 -o /opt/wcf/sdk.dll \
-        "https://github.com/lich0821/WeChatFerry/releases/download/${WCF_RELEASE}/sdk.dll" \
+        "${WCF_BASE_URL}/${WCF_RELEASE}/sdk.dll" \
     && curl -fL --retry 3 -o /opt/wcf/spy.dll \
-        "https://github.com/lich0821/WeChatFerry/releases/download/${WCF_RELEASE}/spy.dll" \
+        "${WCF_BASE_URL}/${WCF_RELEASE}/spy.dll" \
     && ls -l /opt/wcf
 
 # Bake a ready-to-use Wine prefix with WeChat 3.9.12.51 into the image. The
