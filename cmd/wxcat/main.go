@@ -21,6 +21,7 @@ import (
 	"wxcat/internal/backend"
 	restbackend "wxcat/internal/backend/rest"
 	wcfbackend "wxcat/internal/backend/wcf"
+	weflowbackend "wxcat/internal/backend/weflow"
 	"wxcat/internal/config"
 	"wxcat/internal/idmap"
 	"wxcat/internal/logging"
@@ -310,8 +311,10 @@ func newBackend(cfg *config.Config, log *slog.Logger) (backend.Backend, error) {
 		return restbackend.New("mimicwx", cfg.Backend.MimicWX, log), nil
 	case "webhook":
 		return restbackend.New("webhook", cfg.Backend.Webhook, log), nil
+	case "weflow":
+		return weflowbackend.New(cfg.Backend.WeFlow, log), nil
 	default:
-		return nil, fmt.Errorf("unknown backend type %q (want wcf, mimicwx or webhook)", cfg.Backend.Type)
+		return nil, fmt.Errorf("unknown backend type %q (want wcf, mimicwx, webhook or weflow)", cfg.Backend.Type)
 	}
 }
 

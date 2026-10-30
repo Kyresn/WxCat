@@ -72,6 +72,30 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\start.ps1
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/get_login_info -Headers @{ Authorization = "Bearer 你的token" } -ContentType "application/json" -Body "{}"
 ```
 
+## 备选：WeFlow 后端（不注入，兼容微信 4.x）
+
+如果不希望注入微信进程，或本机已装微信 4.x：
+
+1. 安装并登录 [WeFlow](https://github.com/hicccc77/WeFlow)，在设置里启用 HTTP API 与主动推送，记下端口和 Access Token。
+2. 把 `config\wxcat.json` 的 `backend` 改为：
+
+```json
+"backend": {
+  "type": "weflow",
+  "weflow": {
+    "baseUrl": "http://127.0.0.1:5031",
+    "token": "WeFlow 的 Access Token",
+    "selfWxid": "机器人账号 wxid",
+    "sendMode": "uia",
+    "uiaScript": "scripts/windows/uia-send.ps1"
+  }
+}
+```
+
+3. 直接运行 `wxcat.exe`，不需要 `setup.ps1` 的微信解包，也不需要 `wxinject.exe`。
+
+发送通过 `scripts/windows/uia-send.ps1` 操作微信窗口，会抢焦点。完整说明见 [weflow.md](weflow.md)。
+
 ## 与已安装微信共存
 
 - 私有副本在 `runtime\wechat`，不写 `Program Files`，不改系统微信的文件。

@@ -31,6 +31,16 @@
       "sendImagePath": "/send_image",
       "wsPath": "/ws",
       "pollIntervalMs": 2000
+    },
+    "weflow": {
+      "baseUrl": "http://127.0.0.1:5031",
+      "token": "",
+      "selfWxid": "",
+      "sendMode": "uia",
+      "senderUrl": "",
+      "senderToken": "",
+      "uiaScript": "scripts/windows/uia-send.ps1",
+      "pollIntervalMs": 0
     }
   },
   "idMode": "numeric",

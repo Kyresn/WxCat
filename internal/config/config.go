@@ -35,10 +35,30 @@ type Config struct {
 
 // BackendConfig selects and configures the WeChat backend.
 type BackendConfig struct {
-	Type    string     `json:"type"` // wcf | mimicwx | webhook
-	WCF     WCFConfig  `json:"wcf"`
-	MimicWX RestConfig `json:"mimicwx"`
-	Webhook RestConfig `json:"webhook"`
+	Type    string       `json:"type"` // wcf | mimicwx | webhook | weflow
+	WCF     WCFConfig    `json:"wcf"`
+	MimicWX RestConfig   `json:"mimicwx"`
+	Webhook RestConfig   `json:"webhook"`
+	WeFlow  WeFlowConfig `json:"weflow"`
+}
+
+// WeFlowConfig points at WeFlow's local HTTP API and configures sending.
+type WeFlowConfig struct {
+	BaseURL string `json:"baseUrl"`
+	Token   string `json:"token"`
+	// SelfWxid is required: WeFlow does not expose the logged-in account.
+	SelfWxid string `json:"selfWxid"`
+	// SendMode: "uia" (Windows UI Automation script), "http" (external
+	// sender endpoint), or "none" (receive only).
+	SendMode string `json:"sendMode"`
+	// SenderURL is used when SendMode is "http". It receives
+	// {"to","text","ats","images"} JSON.
+	SenderURL   string `json:"senderUrl"`
+	SenderToken string `json:"senderToken"`
+	// UiaScript is the PowerShell sender used by SendMode "uia".
+	UiaScript string `json:"uiaScript"`
+	// PollIntervalMs enables a fallback poll of unread sessions. 0 disables it.
+	PollInterval int `json:"pollIntervalMs"`
 }
 
 // WCFConfig points at the WeChatFerry RPC ports.
@@ -159,6 +179,11 @@ func Default() *Config {
 				WSPath:        "/ws",
 				PollInterval:  2000,
 			},
+			WeFlow: WeFlowConfig{
+				BaseURL:   "http://127.0.0.1:5031",
+				SendMode:  "uia",
+				UiaScript: "scripts/windows/uia-send.ps1",
+			},
 		},
 		IDMode:              "numeric",
 		ReportSelfMessage:   false,
@@ -276,6 +301,24 @@ func (c *Config) ApplyEnv() {
 	if v := os.Getenv("WXCAT_MIMICWX_SELF_WXID"); v != "" {
 		c.Backend.MimicWX.SelfWxid = v
 	}
+	if v := os.Getenv("WXCAT_WEFLOW_BASE_URL"); v != "" {
+		c.Backend.WeFlow.BaseURL = v
+	}
+	if v := os.Getenv("WXCAT_WEFLOW_TOKEN"); v != "" {
+		c.Backend.WeFlow.Token = v
+	}
+	if v := os.Getenv("WXCAT_WEFLOW_SELF_WXID"); v != "" {
+		c.Backend.WeFlow.SelfWxid = v
+	}
+	if v := os.Getenv("WXCAT_WEFLOW_SEND_MODE"); v != "" {
+		c.Backend.WeFlow.SendMode = v
+	}
+	if v := os.Getenv("WXCAT_WEFLOW_SENDER_URL"); v != "" {
+		c.Backend.WeFlow.SenderURL = v
+	}
+	if v := os.Getenv("WXCAT_WEFLOW_SENDER_TOKEN"); v != "" {
+		c.Backend.WeFlow.SenderToken = v
+	}
 	c.normalize()
 }
 
@@ -297,6 +340,15 @@ func (c *Config) normalize() {
 	}
 	if c.Backend.WCF.MsgAddr == "" {
 		c.Backend.WCF.MsgAddr = "tcp://127.0.0.1:10087"
+	}
+	if c.Backend.WeFlow.BaseURL == "" {
+		c.Backend.WeFlow.BaseURL = "http://127.0.0.1:5031"
+	}
+	if c.Backend.WeFlow.SendMode == "" {
+		c.Backend.WeFlow.SendMode = "uia"
+	}
+	if c.Backend.WeFlow.UiaScript == "" {
+		c.Backend.WeFlow.UiaScript = "scripts/windows/uia-send.ps1"
 	}
 	for i := range c.Network.HTTPServers {
 		if c.Network.HTTPServers[i].MessagePostFormat == "" {

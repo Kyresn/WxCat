@@ -22,7 +22,7 @@
 - **AstrBot 直连**：反向 WebSocket 带 `X-Self-ID` / `X-Client-Role` / `Authorization`，对应 `aiocqhttp` 适配器。
 - **DSH 直连**：`dsh-onebot` 的 forward-ws、reverse-ws、http 三种模式都能用。
 - **稳定数字 ID**：微信的 `wxid_xxx` / `123@chatroom` 会映射成重启不变、小于 2^53 的整数，兼容 JS 客户端。
-- **可插拔后端**：默认 WeChatFerry（Wine），也可对接 MimicWX-Linux 或其他 REST 桥。
+- **可插拔后端**：默认 WeChatFerry（Wine）；也支持 WeFlow（读本地数据库 + SSE，不注入，兼容已装微信 4.x）、MimicWX-Linux 与其他 REST 桥。
 - **一体化镜像**：Xvfb + noVNC 虚拟桌面 + 微信 + 注入 + 网关，`docker compose up -d` 即可。
 - **多架构网关**：`linux/amd64` + `linux/arm64`，arm64 上跑网关、微信后端跑在 x86 机器上。
 - **Windows 原生**：Release 提供 `wxcat.exe` + 32 位注入器 + PowerShell 脚本，微信 3.9.12.51 放在私有目录，不影响系统已装版本。
@@ -209,7 +209,7 @@ url: http://<wxcat-host>:3000
 
 | 字段 | 说明 |
 | --- | --- |
-| `backend.type` | `wcf`（默认）、`mimicwx`、`webhook` |
+| `backend.type` | `wcf`（默认）、`weflow`、`mimicwx`、`webhook` |
 | `idMode` | `numeric`（默认，映射成稳定整数）或 `raw`（直接下发 wxid 字符串） |
 | `groupMode` | `at`（默认，群聊只上报被 @ 的消息）或 `all` |
 | `atKeywords` | 额外的 @ 触发词，例如 `["小助手"]` |
@@ -220,7 +220,7 @@ url: http://<wxcat-host>:3000
 | `network.*.messagePostFormat` | `array` 或 `string`（CQ 码） |
 | `webui.token` | 管理面板 token |
 
-环境变量：`WXCAT_CONFIG`、`WXCAT_DATA`、`WXCAT_BACKEND`、`WXCAT_TOKEN`（给所有未单独设置 token 的 OneBot 端点）、`WXCAT_WEBUI_TOKEN`、`WXCAT_ID_MODE`、`WXCAT_MEDIA_BASE_URL`、`WXCAT_WCF_CMD_ADDR`、`WXCAT_WCF_MSG_ADDR`、`WXCAT_WCF_MEDIA_URL`、`WXCAT_WCF_MEDIA_TOKEN`、`WXCAT_MIMICWX_BASE_URL`、`WXCAT_MIMICWX_TOKEN`、`WXCAT_MIMICWX_SELF_WXID`、`VNC_PASSWORD`。
+环境变量：`WXCAT_CONFIG`、`WXCAT_DATA`、`WXCAT_BACKEND`、`WXCAT_TOKEN`（给所有未单独设置 token 的 OneBot 端点）、`WXCAT_WEBUI_TOKEN`、`WXCAT_ID_MODE`、`WXCAT_MEDIA_BASE_URL`、`WXCAT_WCF_CMD_ADDR`、`WXCAT_WCF_MSG_ADDR`、`WXCAT_WCF_MEDIA_URL`、`WXCAT_WCF_MEDIA_TOKEN`、`WXCAT_MIMICWX_BASE_URL`、`WXCAT_MIMICWX_TOKEN`、`WXCAT_MIMICWX_SELF_WXID`、`WXCAT_WEFLOW_BASE_URL`、`WXCAT_WEFLOW_TOKEN`、`WXCAT_WEFLOW_SELF_WXID`、`WXCAT_WEFLOW_SEND_MODE`、`VNC_PASSWORD`。
 
 ## 后端选择
 
@@ -228,6 +228,7 @@ url: http://<wxcat-host>:3000
 | --- | --- | --- |
 | `wcf`（默认） | Wine + 微信 3.9.12.51 + WeChatFerry。按 wxid 收发，图片/文件/群列表完整。 | 需要完整 OneBot 能力，x86 服务器 |
 | `mimicwx` | 对接 MimicWX-Linux（微信 Linux 原生客户端 + SQLCipher + UI 自动化）。无注入、封号风险低，但发送按显示名寻址、速度慢。 | 更看重账号安全，能接受功能缩水 |
+| `weflow` | 对接 [WeFlow](https://github.com/hicccc77/WeFlow)：读本地数据库 + SSE 收消息，不注入微信；发送走 Windows UIA 或外部 HTTP 发送服务。 | 已装微信 4.x、不想注入、能接受 UIA 发送 |
 | `webhook` | 通用 REST 桥适配器，路径可配置。 | 已有自己的微信 hook |
 
 WCF 后端已归档（上游 `lich0821/WeChatFerry` 停止维护），因此微信版本锁定 3.9.12.51。详见 [docs/backend-wcf.md](docs/backend-wcf.md)。
@@ -318,14 +319,14 @@ cmd/wxcat           网关入口
 cmd/wcf-agent       媒体代理（远程网关时在微信主机上解密/暂存文件）
 cmd/wxinject        Windows 32 位 DLL 注入器（容器内用 wine 执行）
 internal/onebot     OneBot 11 协议层与四种传输
-internal/backend    Backend 接口、wcf / rest 适配器
+internal/backend    Backend 接口、wcf / weflow / rest 适配器
 internal/pipeline   去重、自发过滤、群 @ 过滤
 internal/idmap      wxid ↔ 数字 ID 持久映射
 internal/media      解密媒体缓存与 /media 服务
 internal/webui      管理面板（内嵌静态页）
 third_party/wcf     WeChatFerry protobuf 与精简客户端（MIT）
 docker/             Dockerfile（多架构网关）、Dockerfile.wcf（amd64 一体化）、supervisord、注入脚本
-scripts/windows/    setup.ps1、start.ps1、install-task.ps1
+scripts/windows/    setup.ps1、start.ps1、install-task.ps1、uia-send.ps1
 .github/workflows   CI、ghcr 镜像构建、Release 发行包
 ```
 
