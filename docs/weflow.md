@@ -1,6 +1,8 @@
 # 后端：WeFlow
 
-用 [WeFlow](https://github.com/hicccc77/WeFlow) 读取本机微信数据库、通过 SSE 接收新消息，由 WxCat 转成 OneBot 11。**不注入微信进程**，不需要微信 3.9.12.51，可与已安装的微信 4.x 共存。
+用 [WeFlow](https://github.com/hicccc77/WeFlow) 或 [AstrWeChat](https://github.com/CMKH1337/Astrwechat) 读取本机微信数据库、通过 SSE 接收新消息，由 WxCat 转成 OneBot 11。**不注入微信进程**，不需要微信 3.9.12.51，可与已安装的微信 4.x 共存。
+
+AstrWeChat 的 HTTP/SSE API 与 WeFlow 完全一致（默认同为 `127.0.0.1:5031`）。把 `backend.type` 写成 `weflow` 或 `astrwechat`，`baseUrl` 指向 AstrWeChat 即可。
 
 ## 架构
 

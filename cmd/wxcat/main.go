@@ -180,35 +180,36 @@ func run() error {
 	}
 
 	// Wait for the WeChat account to log in, then publish its identity and
-	// start reverse WebSocket clients (they need a real self_id).
+	// start reverse WebSocket clients (they need a real self_id). Probe once
+	// immediately so backends that already know the account (WeFlow selfWxid,
+	// a logged-in WCF) publish events with a correct self_id from the start.
 	go func() {
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
 		attempts := 0
 		for {
-			select {
-			case <-ctx.Done():
+			if ctx.Err() != nil {
 				return
-			case <-ticker.C:
-				attempts++
-				probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				self, err := be.Self(probeCtx)
-				cancel()
-				if err != nil || self.ID == "" {
-					if attempts == 30 {
-						// Keep the gateway usable even when the backend cannot
-						// report the account (for example a REST bridge without
-						// selfWxid configured).
-						logger.Warn("account still unknown after 60s; starting reverse websockets with self_id=0")
-						startReverses()
-					}
-					continue
-				}
+			}
+			attempts++
+			probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			self, err := be.Self(probeCtx)
+			cancel()
+			if err == nil && self.ID != "" {
 				resolver.SetSelf(self.ID)
 				filter.SetSelf(self.ID, self.Name)
 				logger.Info("onebot identity ready", "wxid", self.ID, "self_id", resolver.Self())
 				startReverses()
 				return
+			}
+			if attempts == 30 {
+				// Keep the gateway usable even when the backend cannot report
+				// the account (for example a REST bridge without selfWxid).
+				logger.Warn("account still unknown after 60s; starting reverse websockets with self_id=0")
+				startReverses()
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
 			}
 		}
 	}()
@@ -311,7 +312,8 @@ func newBackend(cfg *config.Config, log *slog.Logger) (backend.Backend, error) {
 		return restbackend.New("mimicwx", cfg.Backend.MimicWX, log), nil
 	case "webhook":
 		return restbackend.New("webhook", cfg.Backend.Webhook, log), nil
-	case "weflow":
+	case "weflow", "astrwechat":
+		// AstrWeChat exposes the same HTTP/SSE API as WeFlow.
 		return weflowbackend.New(cfg.Backend.WeFlow, log), nil
 	default:
 		return nil, fmt.Errorf("unknown backend type %q (want wcf, mimicwx, webhook or weflow)", cfg.Backend.Type)

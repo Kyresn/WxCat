@@ -31,7 +31,7 @@
 
 services:
   wxcat:
-    image: ${WXCAT_FULL_IMAGE:-ghcr.io/kyresn/wxcat-wcf:0.2.0}
+    image: ${WXCAT_FULL_IMAGE:-ghcr.io/kyresn/wxcat-wcf:0.2.1}
     container_name: ${WXCAT_CONTAINER_NAME:-wxcat}
     platform: linux/amd64
     restart: unless-stopped

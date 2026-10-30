@@ -35,6 +35,10 @@ func main() {
 		dll = os.Args[1]
 	}
 
+	if err := enableDebugPrivilege(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: SeDebugPrivilege: %v\n", err)
+	}
+
 	pid, err := findProcess("WeChat.exe")
 	if err != nil {
 		fatal(err)
@@ -74,6 +78,35 @@ func findProcess(name string) (uint32, error) {
 		}
 	}
 	return 0, fmt.Errorf("%s is not running", name)
+}
+
+// enableDebugPrivilege lets an elevated process open protected targets such as
+// WeChat. Without it OpenProcess can fail with ERROR_ACCESS_DENIED even when the
+// user is an administrator.
+func enableDebugPrivilege() error {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(),
+		windows.TOKEN_ADJUST_PRIVILEGES|windows.TOKEN_QUERY, &token); err != nil {
+		return err
+	}
+	defer token.Close()
+
+	name, err := windows.UTF16PtrFromString("SeDebugPrivilege")
+	if err != nil {
+		return err
+	}
+	var luid windows.LUID
+	if err := windows.LookupPrivilegeValue(nil, name, &luid); err != nil {
+		return err
+	}
+	state := windows.Tokenprivileges{
+		PrivilegeCount: 1,
+		Privileges: [1]windows.LUIDAndAttributes{{
+			Luid:       luid,
+			Attributes: windows.SE_PRIVILEGE_ENABLED,
+		}},
+	}
+	return windows.AdjustTokenPrivileges(token, false, &state, 0, nil, nil)
 }
 
 func inject(pid uint32, dll string) error {
