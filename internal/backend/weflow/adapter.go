@@ -137,9 +137,6 @@ func (a *Adapter) sseLoop(ctx context.Context) {
 
 func (a *Adapter) sseOnce(ctx context.Context) error {
 	endpoint := a.cfg.BaseURL + "/api/v1/push/messages"
-	if a.cfg.Token != "" {
-		endpoint += "?access_token=" + url.QueryEscape(a.cfg.Token)
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err
@@ -418,7 +415,11 @@ func (a *Adapter) mediaLoader(m wfMessage) func() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		a.authorize(req)
+		// Only send the WeFlow token to the configured WeFlow host. Media URLs
+		// come from WeFlow data and could point anywhere.
+		if a.sameHost(m.MediaURL) {
+			a.authorize(req)
+		}
 		resp, err := a.client.Do(req)
 		if err != nil {
 			return nil, err
@@ -832,6 +833,18 @@ func (a *Adapter) get(ctx context.Context, path string) ([]byte, error) {
 		return nil, fmt.Errorf("weflow returned %s", resp.Status)
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+}
+
+func (a *Adapter) sameHost(raw string) bool {
+	base, err := url.Parse(a.cfg.BaseURL)
+	if err != nil {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Scheme, base.Scheme) && strings.EqualFold(u.Host, base.Host)
 }
 
 func (a *Adapter) authorize(req *http.Request) {

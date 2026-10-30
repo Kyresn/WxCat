@@ -184,3 +184,58 @@ func TestDeriveSelf(t *testing.T) {
 		t.Fatalf("unexpected derived self: %#v", self)
 	}
 }
+
+func TestSSEUsesHeaderToken(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/messages", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"success":true,"messages":[{"localId":1,"serverId":"1","createTime":1700000000,"isSend":0,"senderUsername":"wxid_member","content":"hi","parsedContent":"hi"}]}`)
+	})
+	mux.HandleFunc("/api/v1/push/messages", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("access_token") != "" {
+			http.Error(w, "token must not be in the URL", http.StatusBadRequest)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer secret" {
+			http.Error(w, "missing bearer token", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "event: message.new\n")
+		_, _ = io.WriteString(w, `data: {"event":"message.new","sessionId":"wxid_friend","rawid":"1"}`+"\n\n")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	a := New(config.WeFlowConfig{BaseURL: srv.URL, Token: "secret", SelfWxid: "wxid_bot", SendMode: "none"}, testLogger())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := a.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer a.Stop()
+	select {
+	case <-a.Events():
+	case <-time.After(5 * time.Second):
+		t.Fatal("no event; SSE auth failed")
+	}
+}
+
+func TestMediaTokenOnlyForWeFlowHost(t *testing.T) {
+	var foreignAuth string
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		foreignAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte("png"))
+	}))
+	defer foreign.Close()
+
+	a := New(config.WeFlowConfig{BaseURL: "http://127.0.0.1:1", Token: "secret", SelfWxid: "wxid_bot"}, testLogger())
+	loader := a.mediaLoader(wfMessage{MediaURL: foreign.URL})
+	if _, err := loader(); err != nil {
+		t.Fatal(err)
+	}
+	if foreignAuth != "" {
+		t.Fatalf("token leaked to foreign host: %q", foreignAuth)
+	}
+}
