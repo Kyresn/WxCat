@@ -104,7 +104,10 @@ its settings, then run this script again. Or pass -AppExe <path>.
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $app
     $psi.WorkingDirectory = Split-Path -Parent $app
-    $psi.UseShellExecute = $true
+    $psi.UseShellExecute = $false
+    # Electron apps exit immediately when ELECTRON_RUN_AS_NODE is inherited
+    # from an IDE/agent environment.
+    [void]$psi.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE")
     [void][System.Diagnostics.Process]::Start($psi)
 
     $deadline = (Get-Date).AddSeconds($WaitSeconds)
