@@ -94,6 +94,14 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/get_login_info -Header
 
 3. 直接运行 `wxcat.exe`，不需要 `setup.ps1` 的微信解包，也不需要 `wxinject.exe`。
 
+或者用启动脚本自动探测/启动 AstrWeChat 或 WeFlow，再启动网关：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\start-astrwechat.ps1
+```
+
+脚本会先检查 `http://127.0.0.1:5031/health`，未响应时尝试从常见安装目录启动 AstrWeChat/WeFlow，等待 API 就绪后运行 `wxcat.exe`。
+
 发送通过 `scripts/windows/uia-send.ps1` 操作微信窗口，会抢焦点。完整说明见 [weflow.md](weflow.md)。
 
 ## 与已安装微信共存
