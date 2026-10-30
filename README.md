@@ -118,6 +118,19 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\start.ps1
 
 `setup.ps1` 会把微信 3.9.12.51（32 位）放进私有目录 `runtime\wechat`，不安装到 `Program Files`，不影响已安装的微信 4.x。完整说明见 [docs/windows.md](docs/windows.md)。
 
+### 方式五：WeFlow（不注入，兼容微信 4.x）
+
+已装微信 4.x 或不想注入时，用 WeFlow 读本地数据库 + SSE 收消息：
+
+```json
+"backend": {
+  "type": "weflow",
+  "weflow": { "baseUrl": "http://127.0.0.1:5031", "token": "WeFlow Token", "sendMode": "uia" }
+}
+```
+
+发送由 `scripts/windows/uia-send.ps1` 通过 Windows UI Automation 完成。详见 [docs/weflow.md](docs/weflow.md)。
+
 登录：
 
 1. 打开 `http://<host>:6080/vnc.html`（VNC 密码默认 `wxcat`，可用 `VNC_PASSWORD` 修改）。
