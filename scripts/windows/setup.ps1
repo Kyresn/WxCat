@@ -8,8 +8,8 @@
 .DESCRIPTION
     Run this once after extracting the release zip. It:
       1. downloads the WeChatFerry DLLs and the WeChat 3.9.12.51 installer
-      2. extracts WeChat into runtime\wechat (or installs it into that private
-         directory when 7-Zip is unavailable)
+      2. extracts WeChat into runtime\wechat with 7-Zip (7-Zip is required;
+         the script never runs the WeChat installer or writes to Program Files)
       3. creates config\wxcat.json
       4. optionally opens the OneBot ports in Windows Firewall
 

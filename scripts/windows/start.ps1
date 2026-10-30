@@ -55,10 +55,6 @@ function Get-WeChatExe {
         }
         if ($hits -and $candidates.Count -eq 0) { $candidates += $hits[0].FullName }
     }
-    $candidates += @(
-        (Join-Path ${env:ProgramFiles(x86)} "Tencent\WeChat\WeChat.exe"),
-        (Join-Path $env:ProgramFiles "Tencent\WeChat\WeChat.exe")
-    )
     foreach ($p in $candidates) {
         if ($p -and (Test-Path -LiteralPath $p)) { return (Resolve-Path -LiteralPath $p).Path }
     }
