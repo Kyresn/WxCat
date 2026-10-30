@@ -230,7 +230,7 @@ func (a *Adapter) handlePush(ctx context.Context, event string, data []byte) {
 }
 
 func (a *Adapter) handleNewMessage(ctx context.Context, push pushEvent) {
-	msgs, err := a.fetchMessages(ctx, push.SessionID, 50)
+	msgs, err := a.fetchMessagesSince(ctx, push.SessionID, push.Timestamp-120, 50)
 	if err != nil {
 		a.log.Warn("weflow message lookup failed", "session", push.SessionID, "err", err)
 		return
@@ -785,6 +785,25 @@ func (a *Adapter) fetchSessions(ctx context.Context) ([]wfSession, error) {
 
 func (a *Adapter) fetchMessages(ctx context.Context, talker string, limit int) ([]wfMessage, error) {
 	path := fmt.Sprintf("/api/v1/messages?talker=%s&limit=%d", url.QueryEscape(talker), limit)
+	body, err := a.get(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Messages []wfMessage `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Messages, nil
+}
+
+func (a *Adapter) fetchMessagesSince(ctx context.Context, talker string, since int64, limit int) ([]wfMessage, error) {
+	if since <= 0 {
+		return a.fetchMessages(ctx, talker, limit)
+	}
+	path := fmt.Sprintf("/api/v1/messages?talker=%s&limit=%d&start=%d",
+		url.QueryEscape(talker), limit, since)
 	body, err := a.get(ctx, path)
 	if err != nil {
 		return nil, err
