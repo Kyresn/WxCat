@@ -76,7 +76,7 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/get_login_info -Header
 
 如果不希望注入微信进程，或本机已装微信 4.x：
 
-1. 安装并登录 [WeFlow](https://github.com/hicccc77/WeFlow)，在设置里启用 HTTP API 与主动推送，记下端口和 Access Token。
+1. 安装并登录 [WeFlow](https://github.com/hicccc77/WeFlow) 或 [AstrWeChat](https://github.com/CMKH1337/Astrwechat)，在设置里启用 HTTP API 与主动推送，记下端口和 Access Token。两者 API 相同；用 AstrWeChat 时把 `backend.type` 写成 `astrwechat`。
 2. 把 `config\wxcat.json` 的 `backend` 改为：
 
 ```json
