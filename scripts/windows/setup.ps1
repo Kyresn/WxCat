@@ -128,54 +128,41 @@ function Install-WeChatPrivate {
     New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 
     $sevenZip = Get-SevenZip
-    if ($sevenZip) {
-        Write-Host "[wechat] verifying installer with $sevenZip"
-        & $sevenZip t $Setup -y | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "The WeChat installer is corrupt (7-Zip test failed). Delete $Setup and re-run setup.ps1."
-        }
-
-        Write-Host "[wechat] extracting with $sevenZip into $Dir"
-        $tmp = Join-Path $env:TEMP ("wxcat-wechat-" + [Guid]::NewGuid().ToString("N"))
-        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-        try {
-            & $sevenZip x $Setup "-o$tmp" -y | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Warning "[wechat] 7-Zip extraction failed with exit code $LASTEXITCODE"
-            } else {
-                # Large files can appear a moment after 7-Zip exits (antivirus
-                # or filesystem flush). Poll before deciding the payload is bad.
-                $exe = $null
-                for ($i = 0; $i -lt 60; $i++) {
-                    $exe = Find-WeChatExe $tmp
-                    if ($exe -and (Test-WeChatPayload (Split-Path -Parent $exe))) { break }
-                    Start-Sleep -Milliseconds 500
-                }
-                if ($exe -and (Test-WeChatPayload (Split-Path -Parent $exe))) {
-                    Get-ChildItem -LiteralPath $tmp -Force | Copy-Item -Destination $Dir -Recurse -Force
-                    $found = Find-WeChatExe $Dir
-                    if ($found -and (Test-WeChatPayload (Split-Path -Parent $found))) { return $found }
-                }
-                Write-Warning "[wechat] extracted files are incomplete"
-            }
-        } finally {
-            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Warning "[wechat] falling back to a private install"
+    if (-not $sevenZip) {
+        throw "7-Zip is required to provision WeChat privately. Install it from https://www.7-zip.org/ and re-run setup.ps1. WxCat will not install WeChat into Program Files."
     }
 
-    Write-Host "[wechat] installing into the private directory $Dir"
-    # NSIS /D= needs the last argument, unquoted. Use the 8.3 path so spaces
-    # in $Root cannot break the argument.
-    $fso = New-Object -ComObject Scripting.FileSystemObject
-    $shortDir = $fso.GetFolder($Dir).ShortPath
-    Start-Process -FilePath $Setup -ArgumentList "/S", "/D=$shortDir" -Wait
-    for ($i = 0; $i -lt 60; $i++) {
+    Write-Host "[wechat] verifying installer with $sevenZip"
+    & $sevenZip t $Setup -y | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "The WeChat installer is corrupt (7-Zip test failed). Delete $Setup and re-run setup.ps1."
+    }
+
+    Write-Host "[wechat] extracting with $sevenZip into $Dir"
+    $tmp = Join-Path $env:TEMP ("wxcat-wechat-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    try {
+        & $sevenZip x $Setup "-o$tmp" -y | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "7-Zip extraction failed with exit code $LASTEXITCODE"
+        }
+        # Large files can appear a moment after 7-Zip exits.
+        $exe = $null
+        for ($i = 0; $i -lt 60; $i++) {
+            $exe = Find-WeChatExe $tmp
+            if ($exe -and (Test-WeChatPayload (Split-Path -Parent $exe))) { break }
+            Start-Sleep -Milliseconds 500
+        }
+        if (-not $exe -or -not (Test-WeChatPayload (Split-Path -Parent $exe))) {
+            throw "7-Zip extracted an incomplete payload. Delete $Setup and re-download it."
+        }
+        Get-ChildItem -LiteralPath $tmp -Force | Copy-Item -Destination $Dir -Recurse -Force
         $found = Find-WeChatExe $Dir
         if ($found -and (Test-WeChatPayload (Split-Path -Parent $found))) { return $found }
-        Start-Sleep -Seconds 2
+        throw "Could not place the WeChat payload in $Dir"
+    } finally {
+        Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
-    return $null
 }
 
 $base = "https://github.com/lich0821/WeChatFerry/releases/download/$WcfVersion"

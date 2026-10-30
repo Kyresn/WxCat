@@ -10,7 +10,7 @@
 | 微信 | 不需要系统安装；WxCat 使用私有副本 3.9.12.51 |
 | 权限 | 建议管理员 PowerShell（微信若以管理员运行，注入器必须同级） |
 | 端口 | 3000 HTTP、3001 正向 WS、6099 管理面板、6199 反向 WS（出站） |
-| 可选 | 7-Zip（有则直接解包微信，没有则安装到私有目录） |
+| 必需 | 7-Zip（用于把微信解包到私有目录，不安装到系统） |
 
 > 私有副本不会自动升级。`setup.ps1` 会禁用其中的 `WeChatUpdate.exe`。系统里已装的微信 4.x 保持原样。
 
@@ -29,9 +29,8 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1 -Firewall
 `setup.ps1` 会：
 
 - 下载 `sdk.dll`、`spy.dll`、`WeChatSetup-3.9.12.51.exe` 到 `wcf\`
-- 把微信放进 `runtime\wechat`：
-  - 检测到 7-Zip 时直接解包（便携，不写注册表、不建快捷方式）
-  - 没有 7-Zip 时静默安装到该私有目录（`/S /D=...`），仍不碰 `Program Files`
+- 用 7-Zip 把微信解包到 `runtime\wechat`（便携，不写注册表、不建快捷方式）
+- 如果没有 7-Zip，脚本会直接报错退出，**不会**安装微信到 `Program Files`
 - 把 `sdk.dll`、`spy.dll` 复制到私有微信目录
 - 生成 `config\wxcat.json`
 - 可选：放行 3000/3001/6099
@@ -139,9 +138,9 @@ Test-NetConnection 127.0.0.1 -Port 10086
 
 **setup 解包失败**
 
-- 推荐安装 7-Zip：解包模式最干净，不写注册表、不建快捷方式。
-- 没有 7-Zip 时会回退到私有目录静默安装；该模式依赖安装器支持 `/S /D=`，失败时请安装 7-Zip 后重试。
+- 必须安装 7-Zip：脚本只使用解包模式，永不写 `Program Files`。
 - 安装包损坏时脚本会报 `The WeChat installer is corrupt`；删除 `wcf\WeChatSetup-3.9.12.51.exe` 后重跑。
+- 解包后校验 `WeChat.exe`、`WeChatWin.dll`、`WeChatResource.dll`，缺一不可。
 
 **微信自动升级**
 
