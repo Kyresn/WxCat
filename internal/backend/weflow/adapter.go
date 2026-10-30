@@ -68,7 +68,7 @@ func (a *Adapter) Name() string { return "weflow" }
 
 func (a *Adapter) Start(ctx context.Context) error {
 	if a.cfg.SelfWxid == "" {
-		a.log.Warn("weflow.selfWxid is empty; get_login_info will fail until it is set")
+		a.log.Info("weflow.selfWxid is empty; deriving it from sent messages")
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	a.cancel = cancel
@@ -453,24 +453,53 @@ func (a *Adapter) Health(ctx context.Context) (backend.Health, error) {
 }
 
 func (a *Adapter) Self(ctx context.Context) (backend.SelfInfo, error) {
-	if a.cfg.SelfWxid == "" {
-		return backend.SelfInfo{}, fmt.Errorf("%w: set backend.weflow.selfWxid", backend.ErrNotLogin)
-	}
 	a.mu.RLock()
 	self := a.self
 	a.mu.RUnlock()
 	if self.ID != "" {
 		return self, nil
 	}
-	name := a.lookupName(a.cfg.SelfWxid)
-	if name == "" {
-		name = a.cfg.SelfWxid
+
+	wxid := a.cfg.SelfWxid
+	if wxid == "" {
+		// WeFlow does not expose the account, but sent messages carry it.
+		wxid = a.deriveSelf(ctx)
 	}
-	self = backend.SelfInfo{ID: a.cfg.SelfWxid, Name: name}
+	if wxid == "" {
+		return backend.SelfInfo{}, fmt.Errorf("%w: set backend.weflow.selfWxid", backend.ErrNotLogin)
+	}
+	name := a.lookupName(wxid)
+	if name == "" {
+		name = wxid
+	}
+	self = backend.SelfInfo{ID: wxid, Name: name}
 	a.mu.Lock()
 	a.self = self
 	a.mu.Unlock()
 	return self, nil
+}
+
+func (a *Adapter) deriveSelf(ctx context.Context) string {
+	sessions, err := a.fetchSessions(ctx)
+	if err != nil {
+		return ""
+	}
+	for i, s := range sessions {
+		if i >= 10 {
+			break
+		}
+		msgs, err := a.fetchMessages(ctx, s.Username, 20)
+		if err != nil {
+			continue
+		}
+		for _, m := range msgs {
+			if m.IsSend == 1 && m.SenderUsername != "" {
+				a.log.Info("weflow derived self wxid from sent messages", "wxid", m.SenderUsername)
+				return m.SenderUsername
+			}
+		}
+	}
+	return ""
 }
 
 func (a *Adapter) Contacts(ctx context.Context) ([]backend.Contact, error) {

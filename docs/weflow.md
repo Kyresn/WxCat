@@ -52,7 +52,7 @@ WxCat（backend.type = weflow）
 | --- | --- |
 | `baseUrl` | WeFlow API 地址 |
 | `token` | WeFlow Access Token |
-| `selfWxid` | **必填**。WeFlow 不暴露登录账号，WxCat 用它生成 `self_id` 和过滤自发消息 |
+| `selfWxid` | 建议填写。WeFlow 不暴露登录账号；留空时 WxCat 会从已发送消息的 `senderUsername` 推断 |
 | `sendMode` | `uia` / `http` / `none` |
 | `senderUrl` | `http` 模式的发送服务地址 |
 | `uiaScript` | `uia` 模式的 PowerShell 脚本路径 |
@@ -116,9 +116,9 @@ WeFlow 提供 Linux x64 版本，WxCat 网关可以跑在容器里：
 
 ## 排错
 
-**`selfWxid` 未设置**
+**`selfWxid` 未设置且推断失败**
 
-`get_login_info` 返回 103。填写机器人账号 wxid；可从 WeFlow 联系人/会话数据中查。
+`get_login_info` 返回 103。手动填写机器人账号 wxid；可从 WeFlow 联系人/会话数据中查。
 
 **SSE 连不上**
 

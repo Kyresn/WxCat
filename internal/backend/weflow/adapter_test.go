@@ -161,3 +161,26 @@ func TestSendUnsupportedModes(t *testing.T) {
 		t.Fatal("recall should be unsupported")
 	}
 }
+
+func TestDeriveSelf(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/sessions", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"success":true,"sessions":[{"username":"wxid_friend","displayName":"好友","type":1,"unreadCount":0}]}`)
+	})
+	mux.HandleFunc("/api/v1/messages", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"success":true,"messages":[
+			{"localId":1,"serverId":"1","createTime":1700000000,"isSend":1,"senderUsername":"wxid_self","content":"hi"}
+		]}`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	a := New(config.WeFlowConfig{BaseURL: srv.URL, SendMode: "none"}, testLogger())
+	self, err := a.Self(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if self.ID != "wxid_self" {
+		t.Fatalf("unexpected derived self: %#v", self)
+	}
+}
