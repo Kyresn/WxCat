@@ -33,6 +33,11 @@ ARG WECHAT_VERSION=3.9.12.51
 # Override with a mirror when GitHub is slow or blocked, for example
 # --build-arg WCF_BASE_URL=https://ghfast.top/https://github.com/lich0821/WeChatFerry/releases/download
 ARG WCF_BASE_URL=https://github.com/lich0821/WeChatFerry/releases/download
+# SHA-256 of the official WeChatFerry v39.5.2 assets. A mirror is only accepted
+# when the bytes match these values.
+ARG SHA256_WECHAT=86593666b6a81a742435879db25c2575a9f8967b877968c91aaa8a68b5f21af4
+ARG SHA256_SDK=3d43f0d6168cba1beec547e90a257f98083a4cb6555d3391d8ae70729202ed2b
+ARG SHA256_SPY=f2dd8bf5fd0fb73356e10edbca57e64ea4db5d79c7759ec1ea87e9fd6a34f3d2
 
 LABEL org.opencontainers.image.title="WxCat all-in-one" \
       org.opencontainers.image.description="WeChat + WeChatFerry + OneBot 11 gateway (amd64)" \
@@ -88,6 +93,9 @@ RUN curl -fL --retry 3 -o /opt/wcf/WeChatSetup.exe \
         "${WCF_BASE_URL}/${WCF_RELEASE}/sdk.dll" \
     && curl -fL --retry 3 -o /opt/wcf/spy.dll \
         "${WCF_BASE_URL}/${WCF_RELEASE}/spy.dll" \
+    && echo "${SHA256_WECHAT}  /opt/wcf/WeChatSetup.exe" | sha256sum -c - \
+    && echo "${SHA256_SDK}  /opt/wcf/sdk.dll" | sha256sum -c - \
+    && echo "${SHA256_SPY}  /opt/wcf/spy.dll" | sha256sum -c - \
     && ls -l /opt/wcf
 
 # Bake a ready-to-use Wine prefix with WeChat 3.9.12.51 into the image. The

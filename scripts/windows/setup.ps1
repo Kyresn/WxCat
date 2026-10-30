@@ -39,6 +39,7 @@ param(
     [string]$WeChatDir,
     [string]$OfflineSetup,
     [switch]$SkipWeChat,
+    [switch]$SkipHashCheck,
     [switch]$Firewall
 )
 
@@ -56,11 +57,29 @@ $WcfDir = Join-Path $Root "wcf"
 $ConfigDir = Join-Path $Root "config"
 New-Item -ItemType Directory -Force -Path $WcfDir, $ConfigDir, $WeChatDir | Out-Null
 
+# SHA-256 of the official WeChatFerry v39.5.2 release assets. Mirrors are only
+# accepted when the bytes match these values.
+$ExpectedHashes = @{
+    "sdk.dll" = "3d43f0d6168cba1beec547e90a257f98083a4cb6555d3391d8ae70729202ed2b"
+    "spy.dll" = "f2dd8bf5fd0fb73356e10edbca57e64ea4db5d79c7759ec1ea87e9fd6a34f3d2"
+    "WeChatSetup-$WeChatVersion.exe" = "86593666b6a81a742435879db25c2575a9f8967b877968c91aaa8a68b5f21af4"
+}
+
+function Test-FileHash {
+    param([string]$Path, [string]$Expected)
+    if ($SkipHashCheck) { return $true }
+    if (-not $Expected) { return $true }
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    return $actual -eq $Expected.ToLowerInvariant()
+}
+
 function Get-RemoteFile {
     param(
         [string]$Url,
         [string]$Dest,
-        [long]$MinBytes = 1024
+        [long]$MinBytes = 1024,
+        [string]$ExpectedHash = ""
     )
     $mirrors = @(
         $Url,
@@ -73,13 +92,21 @@ function Get-RemoteFile {
         try {
             Write-Host "[download] $u"
             Invoke-WebRequest -Uri $u -OutFile $Dest -UseBasicParsing -TimeoutSec 900
-            if ((Get-Item -LiteralPath $Dest).Length -ge $MinBytes) { return }
-            Write-Warning "[download] file too small, retrying: $u"
+            if ((Get-Item -LiteralPath $Dest).Length -lt $MinBytes) {
+                Write-Warning "[download] file too small, retrying: $u"
+                continue
+            }
+            if (-not (Test-FileHash -Path $Dest -Expected $ExpectedHash)) {
+                Write-Warning "[download] SHA-256 mismatch from $u; discarding"
+                Remove-Item -LiteralPath $Dest -Force -ErrorAction SilentlyContinue
+                continue
+            }
+            return
         } catch {
             Write-Warning "[download] failed: $u ($($_.Exception.Message))"
         }
     }
-    throw "Could not download $Url. Download it manually and pass -OfflineSetup."
+    throw "Could not download $Url with a valid SHA-256. Download it manually and pass -OfflineSetup."
 }
 
 function Find-WeChatExe {
@@ -168,12 +195,17 @@ function Install-WeChatPrivate {
 $base = "https://github.com/lich0821/WeChatFerry/releases/download/$WcfVersion"
 foreach ($name in @("sdk.dll", "spy.dll")) {
     $dest = Join-Path $WcfDir $name
+    $expected = $ExpectedHashes[$name]
     if (Test-Path -LiteralPath $dest) {
-        Write-Host "[skip] $name"
-        continue
+        if (Test-FileHash -Path $dest -Expected $expected) {
+            Write-Host "[skip] $name (checksum ok)"
+            continue
+        }
+        Write-Warning "[wechat] $name has the wrong checksum; downloading again"
+        Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
     }
     Write-Host "[download] $name"
-    Get-RemoteFile -Url "$base/$name" -Dest $dest
+    Get-RemoteFile -Url "$base/$name" -Dest $dest -ExpectedHash $expected
 }
 
 $setupName = "WeChatSetup-$WeChatVersion.exe"
@@ -182,12 +214,22 @@ $setupPath = Join-Path $WcfDir $setupName
 if ($SkipWeChat) {
     Write-Host "[wechat] skipped; pass -WeChatExe to start.ps1"
 } else {
+    $expectedSetup = $ExpectedHashes[$setupName]
     if ($OfflineSetup) {
         $setupPath = (Resolve-Path -LiteralPath $OfflineSetup).Path
         Write-Host "[wechat] using offline installer $setupPath"
-    } elseif (-not (Test-Path -LiteralPath $setupPath)) {
-        Write-Host "[download] $setupName (about 285 MB)"
-        Get-RemoteFile -Url "$base/$setupName" -Dest $setupPath -MinBytes 200MB
+        if (-not (Test-FileHash -Path $setupPath -Expected $expectedSetup)) {
+            throw "Offline installer SHA-256 does not match the pinned WeChatFerry release. Pass -SkipHashCheck only if you trust this build."
+        }
+    } else {
+        if ((Test-Path -LiteralPath $setupPath) -and -not (Test-FileHash -Path $setupPath -Expected $expectedSetup)) {
+            Write-Warning "[wechat] installer has the wrong checksum; downloading again"
+            Remove-Item -LiteralPath $setupPath -Force -ErrorAction SilentlyContinue
+        }
+        if (-not (Test-Path -LiteralPath $setupPath)) {
+            Write-Host "[download] $setupName (about 285 MB)"
+            Get-RemoteFile -Url "$base/$setupName" -Dest $setupPath -MinBytes 200MB -ExpectedHash $expectedSetup
+        }
     }
     $exe = Find-WeChatExe $WeChatDir
     if ($exe) {
