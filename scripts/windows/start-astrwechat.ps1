@@ -19,8 +19,9 @@
 .PARAMETER ApiUrl
     AstrWeChat/WeFlow API base URL, default http://127.0.0.1:5031.
 
-.PARAMETER Token
-    Access token, only used for the health probe.
+.PARAMETER AllowRemoteApi
+    Allow a non-loopback ApiUrl. Off by default so a mistyped URL cannot leak
+    requests to another host.
 
 .PARAMETER AppExe
     Explicit AstrWeChat.exe / WeFlow.exe path when auto-detection fails.
@@ -29,8 +30,8 @@
 param(
     [string]$Root,
     [string]$ApiUrl = "http://127.0.0.1:5031",
-    [string]$Token = "",
     [string]$AppExe = "",
+    [switch]$AllowRemoteApi,
     [int]$WaitSeconds = 90
 )
 
@@ -44,9 +45,9 @@ $WxCat = Join-Path $Root "wxcat.exe"
 
 function Test-Api {
     try {
-        $headers = @{}
-        if ($Token) { $headers["Authorization"] = "Bearer $Token" }
-        $r = Invoke-WebRequest -Uri ($ApiUrl.TrimEnd('/') + "/health") -UseBasicParsing -TimeoutSec 3 -Headers $headers
+        # /health is unauthenticated; never send the API token here.
+        $r = Invoke-WebRequest -Uri ($ApiUrl.TrimEnd('/') + "/health") `
+            -UseBasicParsing -TimeoutSec 3 -MaximumRedirection 0
         return $r.StatusCode -eq 200
     } catch {
         return $false
@@ -69,6 +70,11 @@ function Find-App {
         if ($p -and (Test-Path -LiteralPath $p)) { return (Resolve-Path -LiteralPath $p).Path }
     }
     return $null
+}
+
+$api = [Uri]$ApiUrl
+if (-not $AllowRemoteApi -and -not $api.IsLoopback) {
+    throw "ApiUrl must be loopback unless -AllowRemoteApi is set: $ApiUrl"
 }
 
 if (-not (Test-Path -LiteralPath $WxCat)) {
