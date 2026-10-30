@@ -55,7 +55,13 @@ install_wechat() {
 }
 
 if [ -z "$(find_wechat)" ]; then
-  seed_wine || install_wechat
+  if ! seed_wine; then
+    if [ -f /opt/wcf/WeChatSetup.exe ]; then
+      install_wechat
+    else
+      log "no baked Wine prefix and no installer; the image is incomplete"
+    fi
+  fi
 fi
 
 EXE="$(find_wechat)"

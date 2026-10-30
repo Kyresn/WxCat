@@ -24,7 +24,7 @@ import (
 
 // Version is reported by get_version_info. It is overridden at build time via
 // -ldflags "-X wxcat/internal/onebot.Version=<tag>".
-var Version = "0.1.4"
+var Version = "0.1.5"
 
 const maxDownload = 64 << 20
 

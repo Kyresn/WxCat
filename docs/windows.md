@@ -58,7 +58,7 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\start.ps1
 
 脚本会：
 
-1. 优先使用 `runtime\wechat\WeChat.exe`（私有副本），找不到才回退到系统安装。
+1. 使用 `runtime\wechat\WeChat.exe`（私有副本）；没有私有副本时直接报错，不会使用系统安装的微信（除非显式传 `-WeChatExe`）。
 2. 复制 `sdk.dll` / `spy.dll` 到该目录。
 3. 启动微信（已在运行则跳过）。
 4. 运行 32 位 `wxinject.exe` 注入，轮询 `127.0.0.1:10086` 直到 RPC 端口真正打开。
